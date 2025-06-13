@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import axiosInstance from '../utils/AxiosInterceptor';
+import { privateApi } from '../utils/AxiosInterceptor';
 
 const inputTypes = ['text', 'email', 'number', 'textarea', 'date', 'password'];
 
@@ -30,7 +30,7 @@ export default function AdminFormBuilder() {
       return;
     }
     try {
-      const res = await axiosInstance.post('/forms/create', { title, fields });
+      const res = await privateApi.post('/forms/create', { title, fields });
       console.log("Response:", res.data);
       setFormId(res.data.formId || res.data.form?._id);
     } catch (err) {
