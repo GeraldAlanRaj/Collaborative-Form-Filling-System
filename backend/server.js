@@ -1,8 +1,10 @@
 const express = require('express');
+require("dotenv").config();
 const MongoDB = require('./config/db.js')
 const cors = require('cors');
 const http = require('http');
 const {Server} = require('socket.io');
+const authRoutes = require('./routes/authRoutes');
 const formRoutes = require('./routes/formRoutes.js');
 const setupSocket = require('./socket.js')
 
@@ -19,6 +21,7 @@ app.use(express.json());
 
 MongoDB();
 
+app.use('/api/auth', authRoutes);
 app.use('/api/forms', formRoutes);
 
 setupSocket(io);
