@@ -18,7 +18,7 @@ const setupSocket = (io) => {
       socket.emit('loadResponse', responseDoc.responses);
       socket.emit('formStatus', { isClosed: responseDoc.isClosed });
 
-      // Handle real-time field updates
+      // Handle real-time field sync
       socket.on('updateResponse', async ({ field, value }) => {
         const doc = await Response.findOne({ formId });
         if (!doc || doc.isClosed) return;
@@ -31,7 +31,7 @@ const setupSocket = (io) => {
         doc.responses[field] = value;
         await doc.save();
 
-        // Notify all other users about the change
+        // Notify all the other users about the change
         socket.to(formId).emit('responseUpdated', { field, value });
       });
 
@@ -44,7 +44,7 @@ const setupSocket = (io) => {
         doc.isClosed = true;
         await doc.save();
 
-        // Notify all users that the form is now closed
+        // Notify all the users that the form is closed now
         io.to(formId).emit('formStatus', { isClosed: true });
       });
     });

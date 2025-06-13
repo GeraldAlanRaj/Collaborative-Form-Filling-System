@@ -4,9 +4,9 @@ const MongoDB = require('./config/db.js')
 const cors = require('cors');
 const http = require('http');
 const {Server} = require('socket.io');
-const authRoutes = require('./routes/authRoutes');
+const authRoutes = require('./routes/authRoutes.js');
 const formRoutes = require('./routes/formRoutes.js');
-const setupSocket = require('./socket.js')
+const setupSocket = require('./Socket.js')
 
 const app = express();
 const server = http.createServer(app);

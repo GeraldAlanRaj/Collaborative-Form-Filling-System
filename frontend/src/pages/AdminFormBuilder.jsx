@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import axios from 'axios';
+import { useState } from 'react';
+import axiosInstance from '../utils/AxiosInterceptor';
 
 const inputTypes = ['text', 'email', 'number', 'textarea', 'date', 'password'];
 
@@ -13,32 +13,29 @@ export default function AdminFormBuilder() {
   };
 
   const handleFieldChange = (index, key, value) => {
-    const newFields = [...fields];
-    newFields[index][key] = value;
-    setFields(newFields);
+    const updatedFields = [...fields];
+    updatedFields[index][key] = value;
+    setFields(updatedFields);
   };
 
   const handleRemoveField = (index) => {
-    const newFields = [...fields];
-    newFields.splice(index, 1);
-    setFields(newFields);
+    const updatedFields = [...fields];
+    updatedFields.splice(index, 1);
+    setFields(updatedFields);
   };
 
   const handleSubmit = async () => {
     if (!title.trim() || fields.length === 0) {
-      alert("Please add a form title and at least one field.");
+      alert("Please add title and at least one field.");
       return;
     }
-
     try {
-      const res = await axios.post('http://localhost:8080/api/forms/create', {
-        title,
-        fields
-      });
-      setFormId(res.data.formId);
+      const res = await axiosInstance.post('/forms/create', { title, fields });
+      console.log("Response:", res.data);
+      setFormId(res.data.formId || res.data.form?._id);
     } catch (err) {
-      alert("Error creating form");
-      console.error(err);
+      console.error("Form creation error:", err.response || err);
+      alert(err.response?.data?.message || "Error creating form");
     }
   };
 
@@ -47,25 +44,23 @@ export default function AdminFormBuilder() {
       <h2>Create a Form (Admin)</h2>
 
       <input
-        type="text"
-        placeholder="Form Title"
         value={title}
         onChange={e => setTitle(e.target.value)}
+        placeholder="Form Title"
         style={{ width: '100%', padding: 8, marginBottom: 10 }}
       />
 
-      {fields.map((field, idx) => (
-        <div key={idx} style={{ border: '1px solid #ccc', padding: 10, marginBottom: 10 }}>
+      {fields.map((f, i) => (
+        <div key={i} style={{ border: '1px solid #ccc', padding: 10, marginBottom: 10 }}>
           <input
-            type="text"
+            value={f.label}
+            onChange={e => handleFieldChange(i, 'label', e.target.value)}
             placeholder="Field Label"
-            value={field.label}
-            onChange={e => handleFieldChange(idx, 'label', e.target.value)}
             style={{ marginRight: 10 }}
           />
           <select
-            value={field.type}
-            onChange={e => handleFieldChange(idx, 'type', e.target.value)}
+            value={f.type}
+            onChange={e => handleFieldChange(i, 'type', e.target.value)}
             style={{ marginRight: 10 }}
           >
             {inputTypes.map(type => (
@@ -75,16 +70,15 @@ export default function AdminFormBuilder() {
           <label>
             <input
               type="checkbox"
-              checked={field.required}
-              onChange={e => handleFieldChange(idx, 'required', e.target.checked)}
+              checked={f.required}
+              onChange={e => handleFieldChange(i, 'required', e.target.checked)}
             /> Required
           </label>
-          <button onClick={() => handleRemoveField(idx)} style={{ marginLeft: 10 }}>Remove</button>
+          <button onClick={() => handleRemoveField(i)} style={{ marginLeft: 10 }}>Remove</button>
         </div>
       ))}
 
-      <button onClick={handleAddField}>Add Field</button>
-      <br /><br />
+      <button onClick={handleAddField}>Add Field</button><br /><br />
       <button onClick={handleSubmit}>Create Form</button>
 
       {formId && (

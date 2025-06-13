@@ -1,26 +1,23 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 export default function JoinForm() {
-  const [formId, setFormId] = useState('');
+  const [code, setCode] = useState("");
   const navigate = useNavigate();
 
   const handleJoin = () => {
-    if (formId.trim()) {
-      navigate(`/fill/${formId}`);
+    if (!code.trim()) {
+      alert("Please enter a form code");
+      return;
     }
+    navigate(`/fill/${code}`);
   };
 
   return (
-    <div style={{ padding: 20 }}>
-      <h2>Enter Form ID</h2>
-      <input
-        type="text"
-        placeholder="Form ID"
-        value={formId}
-        onChange={e => setFormId(e.target.value)}
-      />
-      <button onClick={handleJoin}>Join Form</button>
+    <div>
+      <h2>Enter Form Code</h2>
+      <input type="text" value={code} onChange={(e) => setCode(e.target.value)} />
+      <button onClick={handleJoin}>Join</button>
     </div>
   );
 }
