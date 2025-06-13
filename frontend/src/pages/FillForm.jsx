@@ -9,6 +9,8 @@ export default function FillForm() {
   const [responses, setResponses] = useState({});
   const [isClosed, setIsClosed] = useState(false);
   const navigate = useNavigate();
+  //Lock-Field Feature State
+  const [lockedFields, setLockedFields] = useState({});
 
   useEffect(() => {
     axiosInstance.get(`/forms/${formId}`)
@@ -27,17 +29,31 @@ export default function FillForm() {
     socket.on('responseUpdated', ({ field, value }) => {
       setResponses(prev => ({ ...prev, [field]: value }));
     });
+    //Lock Filed Listeners
+    socket.on('fieldLocked', ({ field }) => {
+      setLockedFields((prev) => ({ ...prev, [field]: true }));
+    });
+
+    socket.on('fieldUnlocked', ({ field }) => {
+      setLockedFields((prev) => {
+        const updated = { ...prev };
+        delete updated[field];
+        return updated;
+      });
+    });
 
     return () => {
       socket.off('formStatus');
       socket.off('loadResponse');
       socket.off('responseUpdated');
+      socket.off('fieldLocked');
+      socket.off('fieldUnlocked');
     };
   }, [formId]);
 
   const handleChange = (label, value) => {
     setResponses(prev => ({ ...prev, [label]: value }));
-    socket.emit('updateResponse', { formId, field: label, value }); // ✅ this emits to all connected tabs
+    socket.emit('updateResponse', { formId, field: label, value });
   };
 
   const handleSubmit = () => {
@@ -61,7 +77,13 @@ export default function FillForm() {
               required={f.required}
               value={responses[f.label] || ''}
               onChange={e => handleChange(f.label, e.target.value)}
-              disabled={isClosed}
+              disabled={isClosed || lockedFields[f.label]}
+              onFocus={() =>
+                socket.emit('lockField', { formId, field: f.label })
+              }
+              onBlur={() =>
+                socket.emit('unlockField', { formId, field: f.label })
+              }
             />
           </div>
         ))}

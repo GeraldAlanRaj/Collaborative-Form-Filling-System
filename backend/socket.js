@@ -49,6 +49,16 @@ const setupSocket = (io) => {
       });
     });
 
+    //Bsic field locking 
+    socket.on('lockField', ({ formId, field }) => {
+        socket.to(formId).emit('fieldLocked', { field });
+    });
+    //Basic field unlocking
+    socket.on('unlockField', ({ formId, field }) => {
+        socket.to(formId).emit('fieldUnlocked', { field });
+    });
+
+
     socket.on('disconnect', () => {
       console.log('User disconnected');
     });
