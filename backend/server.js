@@ -12,11 +12,18 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: process.env.CLIENT_URL,
     methods: ['GET', 'POST']
   }
 });
-app.use(cors());
+
+app.use(cors(
+  {
+  origin: process.env.CLIENT_URL,
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true
+}));
+
 app.use(express.json());
 
 MongoDB();
@@ -26,6 +33,6 @@ app.use('/api/forms', formRoutes);
 
 setupSocket(io);
 
-server.listen(8080, () => {
-  console.log('Server is running on port 8080');
+server.listen(process.env.PORT, () => {
+  console.log(`Server is running on port ${process.env.PORT}`);
 });

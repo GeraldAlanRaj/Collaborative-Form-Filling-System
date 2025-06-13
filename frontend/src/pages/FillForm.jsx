@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import axiosInstance from '../utils/AxiosInterceptor';
+import { privateApi } from '../utils/AxiosInterceptor';
 import socket from '../Socket';
 
 export default function FillForm() {
@@ -13,7 +13,7 @@ export default function FillForm() {
   const [lockedFields, setLockedFields] = useState({});
 
   useEffect(() => {
-    axiosInstance.get(`/forms/${formId}`)
+    privateApi.get(`/forms/${formId}`)
       .then(res => setForm(res.data))
       .catch(() => alert("Error loading form"));
   }, [formId]);

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import axios from "axios";
+import { publicApi } from "../utils/AxiosInterceptor";
 import { useNavigate } from "react-router-dom";
 
 export default function Signup() {
@@ -22,7 +22,7 @@ export default function Signup() {
   const handleSignup = async () => {
     if (!validate()) return;
     try {
-      await axios.post("http://localhost:8080/api/auth/signup", { username, email, password });
+      await publicApi.post("/auth/signup", { username, email, password });
       navigate("/login");
     } catch (err) {
       alert(err.response?.data?.message || "Error signing up");

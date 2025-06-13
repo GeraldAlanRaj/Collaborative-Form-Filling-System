@@ -1,5 +1,5 @@
 import { useState } from "react";
-import axios from "axios";
+import { publicApi } from "../utils/AxiosInterceptor";
 import { useNavigate } from "react-router-dom";
 
 const Login = () => {
@@ -9,7 +9,7 @@ const Login = () => {
 
   const handleLogin = async () => {
     try {
-      const res = await axios.post("http://localhost:8080/api/auth/login", { email, password });
+      const res = await publicApi.post("/auth/login", { email, password });
       localStorage.setItem("token", res.data.token);
       localStorage.setItem("role", res.data.role);
       localStorage.setItem("username", res.data.username);
