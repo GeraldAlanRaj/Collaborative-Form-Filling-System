@@ -8,9 +8,8 @@ export default function FillForm() {
   const [form, setForm] = useState(null);
   const [responses, setResponses] = useState({});
   const [isClosed, setIsClosed] = useState(false);
-  const navigate = useNavigate();
-  //Lock-Field Feature State
   const [lockedFields, setLockedFields] = useState({});
+  const navigate = useNavigate();
 
   useEffect(() => {
     privateApi.get(`/forms/${formId}`)
@@ -29,13 +28,13 @@ export default function FillForm() {
     socket.on('responseUpdated', ({ field, value }) => {
       setResponses(prev => ({ ...prev, [field]: value }));
     });
-    //Lock Filed Listeners
+
     socket.on('fieldLocked', ({ field }) => {
-      setLockedFields((prev) => ({ ...prev, [field]: true }));
+      setLockedFields(prev => ({ ...prev, [field]: true }));
     });
 
     socket.on('fieldUnlocked', ({ field }) => {
-      setLockedFields((prev) => {
+      setLockedFields(prev => {
         const updated = { ...prev };
         delete updated[field];
         return updated;
@@ -56,35 +55,100 @@ export default function FillForm() {
     socket.emit('updateResponse', { formId, field: label, value });
   };
 
+  const handleCheckboxChange = (label, option) => {
+    const current = responses[label] || [];
+    const updated = current.includes(option)
+      ? current.filter(o => o !== option)
+      : [...current, option];
+    handleChange(label, updated);
+  };
+
   const handleSubmit = () => {
     socket.emit('submitForm', { formId, responses });
     alert("Form submitted!");
     navigate("/home");
   };
 
-  if (!form) return <div>Loading...</div>;
+  if (!form) return <div>Loading form...</div>;
+  if (!Array.isArray(form.fields)) return <div>Error: Form has no fields defined.</div>;
 
   return (
     <div style={{ padding: 20 }}>
       <h2>{form.title}</h2>
       {isClosed && <p style={{ color: 'red' }}>Form has been submitted and is locked.</p>}
+
       <form onSubmit={(e) => e.preventDefault()}>
         {form.fields.map((f, i) => (
-          <div key={i} style={{ marginBottom: 15 }}>
-            <label>{f.label}</label><br />
-            <input
-              type={f.type}
-              required={f.required}
-              value={responses[f.label] || ''}
-              onChange={e => handleChange(f.label, e.target.value)}
-              disabled={isClosed || lockedFields[f.label]}
-              onFocus={() =>
-                socket.emit('lockField', { formId, field: f.label })
-              }
-              onBlur={() =>
-                socket.emit('unlockField', { formId, field: f.label })
-              }
-            />
+          <div key={i} style={{ marginBottom: 20 }}>
+            <label><strong>{f.label}</strong></label><br />
+
+            {f.type === 'text' || f.type === 'number' || f.type === 'date' ? (
+              <input
+                type={f.type}
+                required={f.required}
+                value={responses[f.label] || ''}
+                onChange={e => handleChange(f.label, e.target.value)}
+                disabled={isClosed || lockedFields[f.label]}
+                onFocus={() => socket.emit('lockField', { formId, field: f.label })}
+                onBlur={() => socket.emit('unlockField', { formId, field: f.label })}
+              />
+            ) : f.type === 'textarea' ? (
+              <textarea
+                required={f.required}
+                value={responses[f.label] || ''}
+                onChange={e => handleChange(f.label, e.target.value)}
+                disabled={isClosed || lockedFields[f.label]}
+                onFocus={() => socket.emit('lockField', { formId, field: f.label })}
+                onBlur={() => socket.emit('unlockField', { formId, field: f.label })}
+              />
+            ) : f.type === 'radio' ? (
+              f.options?.map((opt, j) => (
+                <label key={j}>
+                  <input
+                    type="radio"
+                    name={f.label}
+                    value={opt}
+                    checked={responses[f.label] === opt}
+                    onChange={e => handleChange(f.label, e.target.value)}
+                    disabled={isClosed || lockedFields[f.label]}
+                  />
+                  {opt}
+                </label>
+              ))
+            ) : f.type === 'checkbox' ? (
+              f.options?.map((opt, j) => (
+                <label key={j}>
+                  <input
+                    type="checkbox"
+                    value={opt}
+                    checked={(responses[f.label] || []).includes(opt)}
+                    onChange={() => handleCheckboxChange(f.label, opt)}
+                    disabled={isClosed || lockedFields[f.label]}
+                  />
+                  {opt}
+                </label>
+              ))
+            ) : f.type === 'select' ? (
+              <select
+                required={f.required}
+                value={responses[f.label] || ''}
+                onChange={e => handleChange(f.label, e.target.value)}
+                disabled={isClosed || lockedFields[f.label]}
+              >
+                <option value="">Select...</option>
+                {f.options?.map((opt, j) => (
+                  <option key={j} value={opt}>{opt}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                required={f.required}
+                value={responses[f.label] || ''}
+                onChange={e => handleChange(f.label, e.target.value)}
+                disabled={isClosed || lockedFields[f.label]}
+              />
+            )}
           </div>
         ))}
         <button type="button" onClick={handleSubmit} disabled={isClosed}>Submit</button>
