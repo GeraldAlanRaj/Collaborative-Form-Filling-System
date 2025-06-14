@@ -42,7 +42,6 @@ A full-stack web application that enables real-time, multi-user form collaborati
 
 * React
 * Vite
-* Tailwind CSS
 * Axios
 * Socket.IO client
 
