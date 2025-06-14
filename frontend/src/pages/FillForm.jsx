@@ -64,6 +64,19 @@ export default function FillForm() {
   };
 
   const handleSubmit = () => {
+    const missingFields = form.fields.filter(f => {
+      if (!f.required) return false;
+      const value = responses[f.label];
+
+      if (f.type === 'checkbox') return !value || value.length === 0;
+      return value === undefined || value === '';
+    });
+
+    if (missingFields.length > 0) {
+      alert("Please fill all required fields: " + missingFields.map(f => f.label).join(', '));
+      return;
+    }
+
     socket.emit('submitForm', { formId, responses });
     alert("Form submitted!");
     navigate("/home");
@@ -80,12 +93,11 @@ export default function FillForm() {
       <form onSubmit={(e) => e.preventDefault()}>
         {form.fields.map((f, i) => (
           <div key={i} style={{ marginBottom: 20 }}>
-            <label><strong>{f.label}</strong></label><br />
+            <label><strong>{f.label}{f.required ? ' *' : ''}</strong></label><br />
 
             {f.type === 'text' || f.type === 'number' || f.type === 'date' ? (
               <input
                 type={f.type}
-                required={f.required}
                 value={responses[f.label] || ''}
                 onChange={e => handleChange(f.label, e.target.value)}
                 disabled={isClosed || lockedFields[f.label]}
@@ -94,7 +106,6 @@ export default function FillForm() {
               />
             ) : f.type === 'textarea' ? (
               <textarea
-                required={f.required}
                 value={responses[f.label] || ''}
                 onChange={e => handleChange(f.label, e.target.value)}
                 disabled={isClosed || lockedFields[f.label]}
@@ -103,7 +114,7 @@ export default function FillForm() {
               />
             ) : f.type === 'radio' ? (
               f.options?.map((opt, j) => (
-                <label key={j}>
+                <label key={j} style={{ display: 'block' }}>
                   <input
                     type="radio"
                     name={f.label}
@@ -117,7 +128,7 @@ export default function FillForm() {
               ))
             ) : f.type === 'checkbox' ? (
               f.options?.map((opt, j) => (
-                <label key={j}>
+                <label key={j} style={{ display: 'block' }}>
                   <input
                     type="checkbox"
                     value={opt}
@@ -130,7 +141,6 @@ export default function FillForm() {
               ))
             ) : f.type === 'select' ? (
               <select
-                required={f.required}
                 value={responses[f.label] || ''}
                 onChange={e => handleChange(f.label, e.target.value)}
                 disabled={isClosed || lockedFields[f.label]}
@@ -143,7 +153,6 @@ export default function FillForm() {
             ) : (
               <input
                 type="text"
-                required={f.required}
                 value={responses[f.label] || ''}
                 onChange={e => handleChange(f.label, e.target.value)}
                 disabled={isClosed || lockedFields[f.label]}
