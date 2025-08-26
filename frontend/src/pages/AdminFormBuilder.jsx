@@ -74,88 +74,93 @@ export default function FormBuilder() {
   };
 
   return (
-    <div style={{ padding: 20 }}>
-      <h2>Form Builder (Admin)</h2>
-
-      <input
-        placeholder="Form Title"
-        value={title}
-        onChange={e => setTitle(e.target.value)}
-        style={{ width: '100%', marginBottom: 10 }}
-      />
-
-      <div style={{ border: '1px solid #ccc', padding: 10 }}>
-        <h3>Add Field</h3>
-
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f6f8fa" }}>
+      <div style={{
+        background: "#fff",
+        padding: "2rem 2.5rem",
+        borderRadius: "1rem",
+        boxShadow: "0 4px 24px rgba(0,0,0,0.08)",
+        minWidth: "400px",
+        maxWidth: "600px",
+        width: "100%"
+      }}>
+        <h2 style={{ textAlign: "center", marginBottom: "1rem", color: "#222" }}>Form Builder (Admin)</h2>
         <input
-          placeholder="Field Label"
-          value={newField.label}
-          onChange={e => setNewField({ ...newField, label: e.target.value })}
-        /><br />
-
-        <input
-          placeholder="Field Name (unique)"
-          value={newField.name}
-          onChange={e => setNewField({ ...newField, name: e.target.value })}
-        /><br />
-
-        <select
-          value={newField.type}
-          onChange={e => {
-            const newType = e.target.value;
-            setNewField({
-              ...newField,
-              type: newType,
-              options: ['radio', 'checkbox', 'select'].includes(newType) ? [] : []
-            });
-          }}
-        >
-          <option value="text">Text</option>
-          <option value="number">Number</option>
-          <option value="checkbox">Checkbox</option>
-          <option value="radio">Radio</option>
-          <option value="select">Dropdown</option>
-        </select><br />
-
-        <label>
+          placeholder="Form Title"
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+          style={{ width: '100%', marginBottom: 10, padding: "0.8rem", borderRadius: "0.5rem", border: "1px solid #d1d5db", fontSize: "1rem" }}
+        />
+        <div style={{ border: '1px solid #d1d5db', padding: 16, borderRadius: "0.75rem", marginBottom: 20 }}>
+          <h3 style={{ marginBottom: "0.5rem" }}>Add Field</h3>
           <input
-            type="checkbox"
-            checked={newField.required}
-            onChange={e => setNewField({ ...newField, required: e.target.checked })}
-          /> Required
-        </label><br />
-
-        {/* Options input for checkbox/radio/select */}
-        {['checkbox', 'radio', 'select'].includes(newField.type) && (
-          <div>
+            placeholder="Field Label"
+            value={newField.label}
+            onChange={e => setNewField({ ...newField, label: e.target.value })}
+            style={{ width: '100%', marginBottom: 8, padding: "0.6rem", borderRadius: "0.5rem", border: "1px solid #d1d5db" }}
+          />
+          <input
+            placeholder="Field Name (unique)"
+            value={newField.name}
+            onChange={e => setNewField({ ...newField, name: e.target.value })}
+            style={{ width: '100%', marginBottom: 8, padding: "0.6rem", borderRadius: "0.5rem", border: "1px solid #d1d5db" }}
+          />
+          <select
+            value={newField.type}
+            onChange={e => {
+              const newType = e.target.value;
+              setNewField({
+                ...newField,
+                type: newType,
+                options: ['radio', 'checkbox', 'select'].includes(newType) ? [] : []
+              });
+            }}
+            style={{ width: '100%', marginBottom: 8, padding: "0.6rem", borderRadius: "0.5rem", border: "1px solid #d1d5db" }}
+          >
+            <option value="text">Text</option>
+            <option value="number">Number</option>
+            <option value="checkbox">Checkbox</option>
+            <option value="radio">Radio</option>
+            <option value="select">Dropdown</option>
+          </select>
+          <label style={{ marginBottom: 8 }}>
             <input
-              placeholder="Add option"
-              value={optionInput}
-              onChange={e => setOptionInput(e.target.value)}
-            />
-            <button type="button" onClick={addOption}>Add Option</button>
-            <ul>
-              {newField.options.map((opt, i) => (
-                <li key={i}>{opt}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        <button type="button" onClick={addField}>Add Field</button>
+              type="checkbox"
+              checked={newField.required}
+              onChange={e => setNewField({ ...newField, required: e.target.checked })}
+              style={{ marginRight: 6 }}
+            /> Required
+          </label>
+          {/* Options input for checkbox/radio/select */}
+          {['checkbox', 'radio', 'select'].includes(newField.type) && (
+            <div style={{ marginBottom: 8 }}>
+              <input
+                placeholder="Add option"
+                value={optionInput}
+                onChange={e => setOptionInput(e.target.value)}
+                style={{ width: '70%', padding: "0.6rem", borderRadius: "0.5rem", border: "1px solid #d1d5db", marginRight: 8 }}
+              />
+              <button type="button" onClick={addOption} style={{ padding: "0.6rem 1rem", borderRadius: "0.5rem", background: "#2563eb", color: "#fff", border: "none", fontWeight: "bold", cursor: "pointer" }}>Add Option</button>
+              <ul style={{ marginTop: 8 }}>
+                {newField.options.map((opt, i) => (
+                  <li key={i}>{opt}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <button type="button" onClick={addField} style={{ padding: "0.7rem 1.2rem", borderRadius: "0.5rem", background: "#16a34a", color: "#fff", border: "none", fontWeight: "bold", cursor: "pointer", marginTop: 8 }}>Add Field</button>
+        </div>
+        <h3 style={{ marginBottom: "0.5rem" }}>Preview Fields</h3>
+        <ul style={{ marginBottom: 20 }}>
+          {fields.map((f, i) => (
+            <li key={i}>
+              {f.label} ({f.type}) {f.required ? '*' : ''}{" "}
+              {f.options?.length > 0 && ` [${f.options.join(', ')}]`}
+            </li>
+          ))}
+        </ul>
+        <button onClick={submitForm} style={{ width: "100%", padding: "0.9rem", borderRadius: "0.5rem", background: "#2563eb", color: "#fff", border: "none", fontWeight: "bold", fontSize: "1rem", cursor: "pointer" }}>Create Form</button>
       </div>
-
-      <h3>Preview Fields</h3>
-      <ul>
-        {fields.map((f, i) => (
-          <li key={i}>
-            {f.label} ({f.type}) {f.required ? '*' : ''}{" "}
-            {f.options?.length > 0 && ` [${f.options.join(', ')}]`}
-          </li>
-        ))}
-      </ul>
-
-      <button onClick={submitForm}>Create Form</button>
     </div>
   );
 }
