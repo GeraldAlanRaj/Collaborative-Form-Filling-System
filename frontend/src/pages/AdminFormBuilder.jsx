@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { privateApi } from '../utils/AxiosInterceptor';
+import '../styles/AdminFormBuilder.css'
 
 export default function FormBuilder() {
   const [title, setTitle] = useState('');
@@ -39,9 +40,7 @@ export default function FormBuilder() {
 
     const needsOptions = ['checkbox', 'radio', 'select'].includes(field.type);
     if (needsOptions) {
-      if (!Array.isArray(field.options) || field.options.length < 2) {
-        return false;
-      }
+      if (!Array.isArray(field.options) || field.options.length < 2) return false;
       const hasEmpty = field.options.some(opt => !opt.trim());
       if (hasEmpty) return false;
     }
@@ -74,36 +73,29 @@ export default function FormBuilder() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f6f8fa" }}>
-      <div style={{
-        background: "#fff",
-        padding: "2rem 2.5rem",
-        borderRadius: "1rem",
-        boxShadow: "0 4px 24px rgba(0,0,0,0.08)",
-        minWidth: "400px",
-        maxWidth: "600px",
-        width: "100%"
-      }}>
-        <h2 style={{ textAlign: "center", marginBottom: "1rem", color: "#222" }}>Form Builder (Admin)</h2>
+    <div className="container">
+      <div className="form-box">
+        <h2>Form Builder (Admin)</h2>
         <input
           placeholder="Form Title"
           value={title}
           onChange={e => setTitle(e.target.value)}
-          style={{ width: '100%', marginBottom: 10, padding: "0.8rem", borderRadius: "0.5rem", border: "1px solid #d1d5db", fontSize: "1rem" }}
+          className="input"
         />
-        <div style={{ border: '1px solid #d1d5db', padding: 16, borderRadius: "0.75rem", marginBottom: 20 }}>
-          <h3 style={{ marginBottom: "0.5rem" }}>Add Field</h3>
+
+        <div className="field-box">
+          <h3>Add Field</h3>
           <input
             placeholder="Field Label"
             value={newField.label}
             onChange={e => setNewField({ ...newField, label: e.target.value })}
-            style={{ width: '100%', marginBottom: 8, padding: "0.6rem", borderRadius: "0.5rem", border: "1px solid #d1d5db" }}
+            className="input"
           />
           <input
             placeholder="Field Name (unique)"
             value={newField.name}
             onChange={e => setNewField({ ...newField, name: e.target.value })}
-            style={{ width: '100%', marginBottom: 8, padding: "0.6rem", borderRadius: "0.5rem", border: "1px solid #d1d5db" }}
+            className="input"
           />
           <select
             value={newField.type}
@@ -115,7 +107,7 @@ export default function FormBuilder() {
                 options: ['radio', 'checkbox', 'select'].includes(newType) ? [] : []
               });
             }}
-            style={{ width: '100%', marginBottom: 8, padding: "0.6rem", borderRadius: "0.5rem", border: "1px solid #d1d5db" }}
+            className="input"
           >
             <option value="text">Text</option>
             <option value="number">Number</option>
@@ -123,35 +115,40 @@ export default function FormBuilder() {
             <option value="radio">Radio</option>
             <option value="select">Dropdown</option>
           </select>
-          <label style={{ marginBottom: 8 }}>
+          <label>
             <input
               type="checkbox"
               checked={newField.required}
               onChange={e => setNewField({ ...newField, required: e.target.checked })}
-              style={{ marginRight: 6 }}
             /> Required
           </label>
-          {/* Options input for checkbox/radio/select */}
+
           {['checkbox', 'radio', 'select'].includes(newField.type) && (
-            <div style={{ marginBottom: 8 }}>
+            <div className="option-input-box">
               <input
                 placeholder="Add option"
                 value={optionInput}
                 onChange={e => setOptionInput(e.target.value)}
-                style={{ width: '70%', padding: "0.6rem", borderRadius: "0.5rem", border: "1px solid #d1d5db", marginRight: 8 }}
+                className="option-input"
               />
-              <button type="button" onClick={addOption} style={{ padding: "0.6rem 1rem", borderRadius: "0.5rem", background: "#2563eb", color: "#fff", border: "none", fontWeight: "bold", cursor: "pointer" }}>Add Option</button>
-              <ul style={{ marginTop: 8 }}>
+              <button type="button" onClick={addOption} className="button-blue">
+                Add Option
+              </button>
+              <ul>
                 {newField.options.map((opt, i) => (
                   <li key={i}>{opt}</li>
                 ))}
               </ul>
             </div>
           )}
-          <button type="button" onClick={addField} style={{ padding: "0.7rem 1.2rem", borderRadius: "0.5rem", background: "#16a34a", color: "#fff", border: "none", fontWeight: "bold", cursor: "pointer", marginTop: 8 }}>Add Field</button>
+
+          <button type="button" onClick={addField} className="button-green">
+            Add Field
+          </button>
         </div>
-        <h3 style={{ marginBottom: "0.5rem" }}>Preview Fields</h3>
-        <ul style={{ marginBottom: 20 }}>
+
+        <h3>Preview Fields</h3>
+        <ul className="preview-list">
           {fields.map((f, i) => (
             <li key={i}>
               {f.label} ({f.type}) {f.required ? '*' : ''}{" "}
@@ -159,7 +156,10 @@ export default function FormBuilder() {
             </li>
           ))}
         </ul>
-        <button onClick={submitForm} style={{ width: "100%", padding: "0.9rem", borderRadius: "0.5rem", background: "#2563eb", color: "#fff", border: "none", fontWeight: "bold", fontSize: "1rem", cursor: "pointer" }}>Create Form</button>
+
+        <button onClick={submitForm} className="button-blue-full">
+          Create Form
+        </button>
       </div>
     </div>
   );

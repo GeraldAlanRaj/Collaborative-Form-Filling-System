@@ -1,0 +1,88 @@
+.container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f6f8fa;
+}
+
+.form-box {
+  background: #fff;
+  padding: 2rem 2.5rem;
+  border-radius: 1rem;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  min-width: 400px;
+  max-width: 600px;
+  width: 100%;
+}
+
+.form-box h2 {
+  text-align: center;
+  margin-bottom: 1rem;
+  color: #222;
+}
+
+.input {
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 0.8rem;
+  border-radius: 0.5rem;
+  border: 1px solid #d1d5db;
+  font-size: 1rem;
+}
+
+.field-box {
+  border: 1px solid #d1d5db;
+  padding: 16px;
+  border-radius: 0.75rem;
+  margin-bottom: 20px;
+}
+
+.option-input-box {
+  margin-bottom: 8px;
+}
+
+.option-input {
+  width: 70%;
+  padding: 0.6rem;
+  border-radius: 0.5rem;
+  border: 1px solid #d1d5db;
+  margin-right: 8px;
+}
+
+.button-blue {
+  padding: 0.6rem 1rem;
+  border-radius: 0.5rem;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.button-green {
+  padding: 0.7rem 1.2rem;
+  border-radius: 0.5rem;
+  background: #16a34a;
+  color: #fff;
+  border: none;
+  font-weight: bold;
+  cursor: pointer;
+  margin-top: 8px;
+}
+
+.button-blue-full {
+  width: 100%;
+  padding: 0.9rem;
+  border-radius: 0.5rem;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  font-weight: bold;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.preview-list {
+  margin-bottom: 20px;
+}

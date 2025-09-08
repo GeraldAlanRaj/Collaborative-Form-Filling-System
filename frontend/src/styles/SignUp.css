@@ -1,0 +1,62 @@
+.auth-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f6f8fa;
+}
+
+.auth-form {
+  background: #fff;
+  padding: 2rem 2.5rem;
+  border-radius: 1rem;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+.auth-form h2 {
+  text-align: center;
+  margin-bottom: 0.5rem;
+  color: #222;
+}
+
+.auth-form input {
+  padding: 0.8rem;
+  border-radius: 0.5rem;
+  border: 1px solid #d1d5db;
+  font-size: 1rem;
+}
+
+.auth-form button {
+  background: #2563eb; /* For Login */
+  color: #fff;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.8rem;
+  font-weight: bold;
+  font-size: 1rem;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(37,99,235,0.08);
+}
+
+.auth-form button[type="submit"]:hover {
+  opacity: 0.9;
+}
+
+.auth-form p {
+  text-align: center;
+  margin-top: 0.5rem;
+}
+
+.auth-form a {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+/* Override button color for signup form */
+.auth-form button {
+  background: #16a34a; /* Signup form button color */
+}
