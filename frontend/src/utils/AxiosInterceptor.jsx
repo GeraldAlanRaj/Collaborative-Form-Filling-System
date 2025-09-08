@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const instance = axios.create({
-  baseURL: "http://localhost:8080/api"
+  baseURL: import.meta.env.VITE_API_BASE_URL,
 });
 
 instance.interceptors.request.use((config) => {
@@ -10,4 +10,10 @@ instance.interceptors.request.use((config) => {
   return config;
 });
 
-export default instance;
+const public_instance = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL,
+});
+
+
+export const privateApi = instance;
+export const publicApi = public_instance;

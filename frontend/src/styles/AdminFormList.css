@@ -1,0 +1,57 @@
+.admin-container {
+  padding: 20px;
+}
+
+.admin-title {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.admin-content {
+  display: flex;
+  gap: 40px;
+}
+
+.forms-list {
+  flex: 1;
+}
+
+.form-items {
+  list-style: none;
+  padding: 0;
+}
+
+.form-items li {
+  margin-bottom: 10px;
+}
+
+.form-button {
+  padding: 0.5rem 1rem;
+  width: 100%;
+  text-align: left;
+  border-radius: 0.5rem;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #000;
+  cursor: pointer;
+}
+
+.form-button.selected {
+  background: #2563eb;
+  color: #fff;
+}
+
+.responses-list {
+  flex: 2;
+}
+
+.responses-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.responses-table th,
+.responses-table td {
+  border: 1px solid #d1d5db;
+  padding: 8px;
+}
