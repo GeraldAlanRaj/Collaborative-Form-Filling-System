@@ -7,6 +7,7 @@ import AdminFormBuilder from "./pages/AdminFormBuilder";
 import PrivateRoute from "./utils/PrivateRoute";
 import AdminRoute from "./utils/AdminRoute";
 import AdminFormsList from "./pages/AdminFormList";
+import AdminFormResponses from "./pages/AdminFormResponses";
 
 function App() {
   return (
@@ -22,9 +23,10 @@ function App() {
         </Route>
 
         <Route element={<AdminRoute />}>
-    <Route path="/admin/create" element={<AdminFormBuilder />} />
-    <Route path="/admin/forms" element={<AdminFormsList />} />
-  </Route>
+          <Route path="/admin/create" element={<AdminFormBuilder />} />
+          <Route path="/admin/forms" element={<AdminFormsList />} />
+          <Route path="/admin/form-responses/:formId" element={<AdminFormResponses />} />
+        </Route>
 
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>

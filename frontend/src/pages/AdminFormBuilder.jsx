@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { privateApi } from '../utils/AxiosInterceptor';
 import '../styles/AdminFormBuilder.css'
+import AdminFormsList from './AdminFormList';
 
 export default function FormBuilder() {
   const [title, setTitle] = useState('');
@@ -75,7 +76,7 @@ export default function FormBuilder() {
   return (
     <div className="container">
       <div className="form-box">
-        <h2>Form Builder (Admin)</h2>
+        <h2>Create a new form</h2>
         <input
           placeholder="Form Title"
           value={title}
@@ -152,14 +153,17 @@ export default function FormBuilder() {
           {fields.map((f, i) => (
             <li key={i}>
               {f.label} ({f.type}) {f.required ? '*' : ''}{" "}
-              {f.options?.length > 0 && ` [${f.options.join(', ')}]`}
+              {f.options?.length > 0 && `[${f.options.join(', ')}]`}
             </li>
           ))}
         </ul>
 
-        <button onClick={submitForm} className="button-blue-full">
+        <button type="button" onClick={submitForm} className="button-submit">
           Create Form
         </button>
+      </div>
+      <div>
+        <AdminFormsList />
       </div>
     </div>
   );

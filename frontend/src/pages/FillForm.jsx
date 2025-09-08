@@ -88,8 +88,8 @@ export default function FillForm() {
 
   return (
     <div className="container">
-      <div className="form-wrapper">
         <h2 className="form-title">{form.title}</h2>
+        <div className="form-wrapper">
         {isClosed && <p className="form-closed">Form has been submitted and is locked.</p>}
         <form onSubmit={(e) => e.preventDefault()}>
           {form.fields.map((f, i) => (
