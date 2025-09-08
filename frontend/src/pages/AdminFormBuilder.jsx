@@ -75,9 +75,6 @@ export default function FormBuilder() {
 
   return (
     <div className="container">
-      <div>
-        <AdminFormsList />
-      </div>
       <div className="form-box">
         <h2>Create a new form</h2>
         <input
@@ -164,6 +161,9 @@ export default function FormBuilder() {
         <button type="button" onClick={submitForm} className="button-submit">
           Create Form
         </button>
+      </div>
+      <div>
+        <AdminFormsList />
       </div>
     </div>
   );
