@@ -1,88 +1,192 @@
-.container {
-  min-height: 100vh;
+/* ===== Form Box (Premium Modern Style) ===== */
+.form-box {
+  background-color: #ffffff;
+  border-radius: 20px;
+  padding: 40px 35px;
+  max-width: 900px;
+  width: 100%;
+  margin: 40px auto;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 35px;
+  font-family: 'Roboto', 'Helvetica', sans-serif;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.form-box:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12);
+}
+
+/* ===== Form Title ===== */
+.form-box h2 {
+  font-size: 2rem;
+  font-weight: 500;
+  color: #111827;
+  margin-bottom: 15px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 10px;
+}
+
+/* ===== Floating Label Inputs ===== */
+.form-box .field-box {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  position: relative;
+}
+
+.form-box .input,
+.form-box textarea,
+.form-box select,
+.form-box input[type="date"] {
+  width: 100%;
+  padding: 14px 16px;
+  font-size: 1rem;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  outline: none;
+  background-color: #f9fafb;
+  transition: all 0.3s ease;
+}
+
+.form-box .input:focus,
+.form-box textarea:focus,
+.form-box select:focus,
+.form-box input[type="date"]:focus {
+  border-color: #2563eb;
+  background-color: #fff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+/* Textarea */
+.form-box textarea {
+  resize: vertical;
+  min-height: 120px;
+  font-size: 1rem;
+}
+
+/* Select Dropdown */
+.form-box select {
+  appearance: none;
+  background: url('data:image/svg+xml;utf8,<svg fill="%23333" height="12" viewBox="0 0 24 24" width="12" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>') no-repeat right 16px center;
+  background-color: #f9fafb;
+  background-size: 12px;
+  padding-right: 40px;
+}
+
+/* ===== Options (Radio/Checkbox) ===== */
+.form-box .option-input-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.form-box .option-input {
   display: flex;
   align-items: center;
-  justify-content: center;
-  background: #f6f8fa;
-}
-
-.form-box {
-  background: #fff;
-  padding: 2rem 2.5rem;
-  border-radius: 1rem;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
-  min-width: 400px;
-  max-width: 600px;
-  width: 100%;
-}
-
-.form-box h2 {
-  text-align: center;
-  margin-bottom: 1rem;
-  color: #222;
-}
-
-.input {
-  width: 100%;
-  margin-bottom: 10px;
-  padding: 0.8rem;
-  border-radius: 0.5rem;
-  border: 1px solid #d1d5db;
-  font-size: 1rem;
-}
-
-.field-box {
-  border: 1px solid #d1d5db;
-  padding: 16px;
-  border-radius: 0.75rem;
-  margin-bottom: 20px;
-}
-
-.option-input-box {
-  margin-bottom: 8px;
-}
-
-.option-input {
-  width: 70%;
-  padding: 0.6rem;
-  border-radius: 0.5rem;
-  border: 1px solid #d1d5db;
-  margin-right: 8px;
-}
-
-.button-blue {
-  padding: 0.6rem 1rem;
-  border-radius: 0.5rem;
-  background: #2563eb;
-  color: #fff;
-  border: none;
-  font-weight: bold;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
   cursor: pointer;
+  font-size: 0.95rem;
+  background-color: #f9fafb;
+  transition: all 0.25s ease;
 }
 
-.button-green {
-  padding: 0.7rem 1.2rem;
-  border-radius: 0.5rem;
-  background: #16a34a;
-  color: #fff;
-  border: none;
-  font-weight: bold;
-  cursor: pointer;
-  margin-top: 8px;
+.form-box .option-input:hover {
+  background: linear-gradient(90deg, #f3f4f6, #e0f2ff);
+  border-color: #d1d5db;
 }
 
-.button-blue-full {
-  width: 100%;
-  padding: 0.9rem;
-  border-radius: 0.5rem;
-  background: #2563eb;
-  color: #fff;
+.form-box .option-input input[type="radio"],
+.form-box .option-input input[type="checkbox"] {
+  accent-color: #2563eb;
+  width: 18px;
+  height: 18px;
+  transition: all 0.2s ease;
+}
+
+/* ===== Buttons ===== */
+.form-box .button-blue,
+.form-box .button-green,
+.form-box .button-submit,
+.form-box .button-blue-full {
+  padding: 14px 24px;
+  border-radius: 12px;
   border: none;
-  font-weight: bold;
+  font-weight: 500;
   font-size: 1rem;
   cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
 }
 
-.preview-list {
-  margin-bottom: 20px;
+/* Primary Blue Button */
+.form-box .button-blue,
+.form-box .button-blue-full,
+.form-box .button-submit {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #fff;
+}
+
+.form-box .button-blue:hover,
+.form-box .button-blue-full:hover,
+.form-box .button-submit:hover {
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.35);
+  transform: translateY(-2px);
+}
+
+/* Green Button */
+.form-box .button-green {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #fff;
+}
+
+.form-box .button-green:hover {
+  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.35);
+  transform: translateY(-2px);
+}
+
+/* ===== Preview List ===== */
+.form-box .preview-list {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.form-box .preview-list li {
+  background-color: #f3f4f6;
+  padding: 14px 18px;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  color: #374151;
+  transition: all 0.2s ease;
+}
+
+.form-box .preview-list li:hover {
+  background-color: #e0f2ff;
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 768px) {
+  .form-box {
+    padding: 30px 25px;
+  }
+
+  .form-box h2 {
+    font-size: 1.7rem;
+  }
+
+  .form-box .input,
+  .form-box textarea,
+  .form-box select,
+  .form-box input[type="date"] {
+    font-size: 0.95rem;
+    padding: 12px 14px;
+  }
 }

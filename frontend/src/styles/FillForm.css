@@ -1,3 +1,4 @@
+/* ===== Container & Wrapper ===== */
 .container {
   padding: 20px;
 }
@@ -8,62 +9,161 @@
   align-items: center;
   justify-content: center;
   background: #f6f8fa;
+  font-family: 'Roboto', 'Helvetica', sans-serif;
 }
 
+/* ===== Form Card ===== */
 .form-wrapper form {
-  background: #fff;
-  padding: 2rem 2.5rem;
-  border-radius: 1rem;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+  background: #ffffff;
+  padding: 2.5rem 3rem;
+  border-radius: 16px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
   min-width: 400px;
   max-width: 600px;
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
 
+.form-wrapper form:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12);
+}
+
+/* ===== Form Title ===== */
 .form-title {
-  text-align: center;
+  text-align: center; /* center the title */
+  font-size: 2rem;
+  font-weight: 500;
+  color: #111827;
   margin-bottom: 1rem;
-  color: #222;
 }
 
+/* ===== Closed Form Message ===== */
 .form-closed {
-  color: red;
+  color: #ef4444;
   text-align: center;
+  font-weight: 500;
+  margin-bottom: 1rem;
 }
 
+/* ===== Form Fields ===== */
 .form-field {
-  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.input-field {
+/* Inputs, Textarea, Select, Date */
+.input-field,
+textarea,
+select,
+input[type="date"] {
   width: 100%;
-  padding: 0.7rem;
-  border-radius: 0.5rem;
-  border: 1px solid #d1d5db;
+  padding: 14px 16px;
   font-size: 1rem;
+  border-radius: 12px;
+  border: 1px solid #d1d5db;
+  background-color: #f9fafb;
+  outline: none;
+  transition: all 0.3s ease;
 }
 
+.input-field:focus,
+textarea:focus,
+select:focus,
+input[type="date"]:focus {
+  border-color: #3b82f6;
+  background-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+/* Textarea */
+textarea {
+  resize: vertical;
+  min-height: 120px;
+}
+
+/* Select dropdown with arrow */
+select {
+  appearance: none;
+  background: url('data:image/svg+xml;utf8,<svg fill="%23333" height="12" viewBox="0 0 24 24" width="12" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>') no-repeat right 16px center;
+  background-size: 12px;
+  padding-right: 40px;
+}
+
+/* ===== Radio/Checkbox Options ===== */
 .option-label {
-  display: block;
-  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  background-color: #f9fafb;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  font-size: 0.95rem;
+}
+
+.option-label:hover {
+  background: linear-gradient(90deg, #f3f4f6, #e0f2ff);
+  border-color: #d1d5db;
 }
 
 .option-input {
-  margin-right: 6px;
+  accent-color: #3b82f6;
+  width: 18px;
+  height: 18px;
 }
 
+/* ===== Submit Button ===== */
 .submit-btn {
   width: 100%;
-  padding: 0.9rem;
-  border-radius: 0.5rem;
-  background: #3b82f6;
-  color: white;
-  font-size: 1rem;
+  padding: 14px 0;
+  border-radius: 12px;
+  font-size: 1.05rem;
+  font-weight: 500;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: #fff;
   border: none;
   cursor: pointer;
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.25);
+  transition: all 0.3s ease;
+}
+
+.submit-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.35);
 }
 
 .submit-btn:disabled {
   background: #9ca3af;
   cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* ===== Responsive Adjustments ===== */
+@media (max-width: 480px) {
+  .form-wrapper form {
+    padding: 2rem 1.5rem;
+  }
+
+  .form-title {
+    font-size: 1.6rem;
+  }
+
+  .input-field,
+  textarea,
+  select,
+  input[type="date"] {
+    font-size: 0.95rem;
+    padding: 12px 14px;
+  }
+
+  .submit-btn {
+    font-size: 1rem;
+  }
 }
