@@ -15,7 +15,7 @@ pipeline {
 
     stage('Build Backend') {
       steps {
-        dir('backend') {
+        dir('proactivle/backend') {
           sh 'npm ci'
           sh 'npm test || echo "backend tests skipped/failed but continuing"'
           sh "docker build -t ${env.BACKEND_IMAGE}:${env.TAG} ."
@@ -25,7 +25,7 @@ pipeline {
 
     stage('Build Frontend') {
       steps {
-        dir('frontend') {
+        dir('proactivle/frontend') {
           sh 'npm ci'
           sh "docker build --build-arg VITE_API_BASE_URL=http://13.201.4.53:8080/api --build-arg VITE_API_SOCKET_URL=http://13.201.4.53:8080 -t ${env.FRONTEND_IMAGE}:${env.TAG} ."
         }
@@ -60,16 +60,14 @@ pipeline {
             string(credentialsId: 'CLIENT_URL_CRED', variable: 'CLIENT_URL')
           ]) {
             sh """
-              # write backend.env into workspace
-              cat > ${WORKSPACE}/backend.env <<EOF
+              cat > ${WORKSPACE}/proactivle/backend.env <<EOF
 MONGODB_URI=${MONGO_URI}
 JWT_SECRET=${JWT_SECRET}
 CLIENT_URL=${CLIENT_URL}
 PORT=8080
 EOF
-              chmod 600 ${WORKSPACE}/backend.env
+              chmod 600 ${WORKSPACE}/proactivle/backend.env
 
-              # run docker compose from workspace (assumes docker-compose.yml is at repo root)
               cd ${WORKSPACE}
               docker compose -f docker-compose.yml pull || true
               docker compose -f docker-compose.yml up -d --remove-orphans
