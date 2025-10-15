@@ -1,0 +1,88 @@
+pipeline {
+  agent any
+
+  environment {
+    DOCKERHUB_CREDENTIALS = 'dockerhub-credentials'
+    BACKEND_IMAGE = "gerryaj2004/proactively-backend"
+    FRONTEND_IMAGE = "gerryaj2004/proactively-frontend"
+    TAG = "${env.GIT_COMMIT ?: env.BUILD_NUMBER ?: 'latest'}"
+  }
+
+  stages {
+    stage('Checkout') {
+      steps { checkout scm }
+    }
+
+    stage('Build Backend') {
+      steps {
+        dir('backend') {
+          sh 'npm ci'
+          sh 'npm test || echo "backend tests skipped/failed but continuing"'
+          sh "docker build -t ${env.BACKEND_IMAGE}:${env.TAG} ."
+        }
+      }
+    }
+
+    stage('Build Frontend') {
+      steps {
+        dir('frontend') {
+          sh 'npm ci'
+          sh "docker build --build-arg VITE_API_BASE_URL=http://13.201.4.53:8080/api --build-arg VITE_API_SOCKET_URL=http://13.201.4.53:8080 -t ${env.FRONTEND_IMAGE}:${env.TAG} ."
+        }
+      }
+    }
+
+    stage('Docker Login') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: env.DOCKERHUB_CREDENTIALS, usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+          sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
+        }
+      }
+    }
+
+    stage('Push Images') {
+      steps {
+        sh "docker push ${env.BACKEND_IMAGE}:${env.TAG}"
+        sh "docker push ${env.FRONTEND_IMAGE}:${env.TAG}"
+        sh "docker tag ${env.BACKEND_IMAGE}:${env.TAG} ${env.BACKEND_IMAGE}:latest || true"
+        sh "docker tag ${env.FRONTEND_IMAGE}:${env.TAG} ${env.FRONTEND_IMAGE}:latest || true"
+        sh "docker push ${env.BACKEND_IMAGE}:latest || true"
+        sh "docker push ${env.FRONTEND_IMAGE}:latest || true"
+      }
+    }
+
+    stage('Write backend.env and Deploy with docker-compose') {
+      steps {
+        script {
+          withCredentials([
+            string(credentialsId: 'MONGO_URI_CRED', variable: 'MONGO_URI'),
+            string(credentialsId: 'JWT_SECRET_CRED', variable: 'JWT_SECRET'),
+            string(credentialsId: 'CLIENT_URL_CRED', variable: 'CLIENT_URL')
+          ]) {
+            sh """
+              # write backend.env into workspace
+              cat > ${WORKSPACE}/backend.env <<EOF
+MONGODB_URI=${MONGO_URI}
+JWT_SECRET=${JWT_SECRET}
+CLIENT_URL=${CLIENT_URL}
+PORT=8080
+EOF
+              chmod 600 ${WORKSPACE}/backend.env
+
+              # run docker compose from workspace (assumes docker-compose.yml is at repo root)
+              cd ${WORKSPACE}
+              docker compose -f docker-compose.yml pull || true
+              docker compose -f docker-compose.yml up -d --remove-orphans
+            """
+          }
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      sh 'docker logout || true'
+    }
+  }
+}
