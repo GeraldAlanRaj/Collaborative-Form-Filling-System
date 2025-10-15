@@ -4,9 +4,8 @@ pipeline {
     environment {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
         DOCKERHUB_REPO = 'yourdockerhubusername/collaborative-form-system'
-        EC2_USER = 'ec2-user'
+        // EC2_USER and EC2_KEY removed from environment. Keep EC2_HOST here or set as a parameter.
         EC2_HOST = 'your-ec2-public-ip'
-        EC2_KEY = credentials('ec2-ssh-key')
     }
 
     stages {
@@ -22,7 +21,6 @@ pipeline {
                 dir('backend') {
                     echo '📦 Installing backend dependencies...'
                     sh 'npm install'
-                    echo '⚙️ Building backend...'
                     sh 'npm run build || echo "No build script found, skipping..."'
                 }
             }
@@ -33,7 +31,6 @@ pipeline {
                 dir('frontend') {
                     echo '📦 Installing frontend dependencies...'
                     sh 'npm install'
-                    echo '⚙️ Building frontend...'
                     sh 'npm run build'
                 }
             }
@@ -64,15 +61,18 @@ pipeline {
             steps {
                 echo '🚀 Deploying on EC2 via SSH...'
                 script {
-                    sh """
-                    ssh -o StrictHostKeyChecking=no -i $EC2_KEY $EC2_USER@$EC2_HOST '
-                        docker pull $DOCKERHUB_REPO-backend &&
-                        docker pull $DOCKERHUB_REPO-frontend &&
-                        cd /home/$EC2_USER/app &&
-                        docker compose down &&
-                        docker compose up -d
-                    '
-                    """
+                    withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-key', keyFileVariable: 'EC2_KEY_FILE', usernameVariable: 'EC2_USER_FROM_CRED')]) {
+                        sh """
+                        chmod 600 "$EC2_KEY_FILE"
+                        ssh -o StrictHostKeyChecking=no -i "$EC2_KEY_FILE" ${EC2_USER_FROM_CRED}@${EC2_HOST} '
+                            docker pull $DOCKERHUB_REPO-backend &&
+                            docker pull $DOCKERHUB_REPO-frontend &&
+                            cd /home/${EC2_USER_FROM_CRED}/app &&
+                            docker compose down &&
+                            docker compose up -d
+                        '
+                        """
+                    }
                 }
             }
         }
