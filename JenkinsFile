@@ -2,11 +2,11 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')  // Set this in Jenkins credentials
+        DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
         DOCKERHUB_REPO = 'yourdockerhubusername/collaborative-form-system'
         EC2_USER = 'ec2-user'
         EC2_HOST = 'your-ec2-public-ip'
-        EC2_KEY = credentials('ec2-ssh-key')  // Private key credential ID in Jenkins
+        EC2_KEY = credentials('ec2-ssh-key')
     }
 
     stages {
@@ -81,11 +81,19 @@ pipeline {
     post {
         success {
             echo '✅ Deployment successful!'
-            sh 'docker logout'
+            script {
+                node {
+                    sh 'docker logout'
+                }
+            }
         }
         failure {
             echo '❌ Pipeline failed. Check logs for details.'
-            sh 'docker logout || true'
+            script {
+                node {
+                    sh 'docker logout || true'
+                }
+            }
         }
     }
 }
