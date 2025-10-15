@@ -2,9 +2,10 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB_REPO = 'yourdockerhubusername/collaborative-form-system'
-        EC2_HOST = 'your-ec2-public-ip'
-        // Do NOT place ssh private key or docker credentials in environment
+        // repo names on Docker Hub (your actual namespaces)
+        BACKEND_REPO = 'gerryaj2004/proactively-backend'
+        FRONTEND_REPO = 'gerryaj2004/proactively-frontend'
+        EC2_HOST = 'your-ec2-public-ip'   // <-- replace with your EC2 public IP or hostname
     }
 
     stages {
@@ -37,17 +38,17 @@ pipeline {
             }
         }
 
-        stage('Docker Login') {
+        stage('Docker Login (use Jenkins credential)') {
             steps {
-                echo '🔐 Logging into DockerHub...'
                 script {
-                    // Ensure you have a Jenkins credential of kind "Username with password" and ID 'dockerhub-credentials'
-                    withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                        def rc = sh(returnStatus: true, script: 'echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin')
+                    // Ensure credentialId 'dockerhub-credentials' exists (Username with password)
+                    withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER_TMP', passwordVariable: 'DOCKER_PASS_TMP')]) {
+                        env.DOCKER_USER = DOCKER_USER_TMP
+                        def rc = sh(returnStatus: true, script: 'echo "$DOCKER_PASS_TMP" | docker login -u "$DOCKER_USER_TMP" --password-stdin')
                         if (rc != 0) {
                             error("Docker login failed (exit code ${rc}). Check dockerhub-credentials username/password (use a Docker Hub token).")
                         } else {
-                            echo "Docker login succeeded as ${DOCKER_USER}"
+                            echo "Docker login succeeded as ${env.DOCKER_USER}"
                         }
                     }
                 }
@@ -57,29 +58,42 @@ pipeline {
         stage('Build & Push Images') {
             steps {
                 script {
-                    echo '🐳 Building Docker images...'
+                    // derive tags (use BUILD_NUMBER if available)
+                    def tag = env.BUILD_NUMBER ?: 'latest'
+                    def backendImage = "${env.BACKEND_REPO}:${tag}"
+                    def frontendImage = "${env.FRONTEND_REPO}:${tag}"
 
-                    // Backend Dockerfile detection and build
+                    echo "🐳 Will build and push:"
+                    echo "  - ${backendImage}"
+                    echo "  - ${frontendImage}"
+
+                    // Backend build (detect Dockerfile / DockerFile)
                     if (fileExists('backend/Dockerfile')) {
-                        sh 'docker build -t $DOCKERHUB_REPO-backend -f backend/Dockerfile backend'
+                        sh "docker build -t ${backendImage} -f backend/Dockerfile backend"
                     } else if (fileExists('backend/DockerFile')) {
-                        sh 'docker build -t $DOCKERHUB_REPO-backend -f backend/DockerFile backend'
+                        sh "docker build -t ${backendImage} -f backend/DockerFile backend"
                     } else {
-                        error "Backend Dockerfile not found (backend/Dockerfile or backend/DockerFile). Please add it."
+                        error "Backend Dockerfile not found (backend/Dockerfile or backend/DockerFile)."
                     }
 
-                    // Frontend Dockerfile detection and build
+                    // Frontend build (detect Dockerfile / DockerFile)
                     if (fileExists('frontend/Dockerfile')) {
-                        sh 'docker build -t $DOCKERHUB_REPO-frontend -f frontend/Dockerfile frontend'
+                        sh "docker build -t ${frontendImage} -f frontend/Dockerfile frontend"
                     } else if (fileExists('frontend/DockerFile')) {
-                        sh 'docker build -t $DOCKERHUB_REPO-frontend -f frontend/DockerFile frontend'
+                        sh "docker build -t ${frontendImage} -f frontend/DockerFile frontend"
                     } else {
-                        error "Frontend Dockerfile not found (frontend/Dockerfile or frontend/DockerFile). Please add it."
+                        error "Frontend Dockerfile not found (frontend/Dockerfile or frontend/DockerFile)."
                     }
 
                     echo '📤 Pushing images to DockerHub...'
-                    sh 'docker push $DOCKERHUB_REPO-backend'
-                    sh 'docker push $DOCKERHUB_REPO-frontend'
+                    def rc1 = sh(returnStatus: true, script: "docker push ${backendImage}")
+                    if (rc1 != 0) {
+                        error("Failed to push ${backendImage}. Ensure Docker Hub repo exists and user ${env.DOCKER_USER} can push.")
+                    }
+                    def rc2 = sh(returnStatus: true, script: "docker push ${frontendImage}")
+                    if (rc2 != 0) {
+                        error("Failed to push ${frontendImage}. Ensure Docker Hub repo exists and user ${env.DOCKER_USER} can push.")
+                    }
                 }
             }
         }
@@ -88,16 +102,14 @@ pipeline {
             steps {
                 echo '🚀 Deploying on EC2 via SSH...'
                 script {
-                    // Ensure you have a Jenkins credential of kind "SSH Username with private key" and ID 'ec2-ssh-key'
                     withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-key', keyFileVariable: 'EC2_KEY_FILE', usernameVariable: 'EC2_USER_FROM_CRED')]) {
                         sh """
                         chmod 600 "$EC2_KEY_FILE"
                         ssh -o StrictHostKeyChecking=no -i "$EC2_KEY_FILE" ${EC2_USER_FROM_CRED}@${EC2_HOST} '
                             set -e
                             echo "Pulling images..."
-                            docker pull $DOCKERHUB_REPO-backend
-                            docker pull $DOCKERHUB_REPO-frontend
-                            echo "Changing to app dir and restarting compose..."
+                            docker pull ${env.BACKEND_REPO}:${env.BUILD_NUMBER ?: "latest"}
+                            docker pull ${env.FRONTEND_REPO}:${env.BUILD_NUMBER ?: "latest"}
                             cd /home/${EC2_USER_FROM_CRED}/app || { echo "app dir not found"; exit 1; }
                             docker compose down || true
                             docker compose up -d
