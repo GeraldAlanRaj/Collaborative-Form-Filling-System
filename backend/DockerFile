@@ -1,4 +1,4 @@
-# proactivle/backend/Dockerfile
+# backend/Dockerfile
 FROM node:18-alpine AS build
 
 WORKDIR /app
@@ -19,6 +19,9 @@ RUN npm ci --production=true
 COPY --from=build /app ./
 
 ENV NODE_ENV=production
-EXPOSE 8080
+# set container port to 8081
+ENV PORT=8081
+
+EXPOSE 8081
 
 CMD ["node", "server.js"]

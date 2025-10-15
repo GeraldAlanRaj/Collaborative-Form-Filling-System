@@ -5,10 +5,10 @@ services:
     restart: always
     env_file: ./backend.env
     ports:
-      - "8080:8080"
+      - "8081:8081"   # host:container -> host 8081 mapped to container 8081
 
   frontend:
     image: gerryaj2004/proactively-frontend:latest
     restart: always
     ports:
-      - "80:80"
+      - "80:8082"     # keep host port 80 but map it to container's 8082

@@ -2,10 +2,9 @@ pipeline {
   agent any
 
   environment {
-    BACKEND_REPO      = 'gerryaj2004/proactively-backend'
-    FRONTEND_REPO     = 'gerryaj2004/proactively-frontend'
-    EC2_HOST          = '13.201.4.53'
-    BACKEND_HOST_PORT = '8081'     // <-- host port to map to container's 8080
+    BACKEND_REPO  = 'gerryaj2004/proactively-backend'
+    FRONTEND_REPO = 'gerryaj2004/proactively-frontend'
+    EC2_HOST      = '13.201.4.53'
   }
 
   stages {
@@ -46,8 +45,9 @@ pipeline {
             def rc = sh(returnStatus: true, script: 'echo "$DOCKER_PASS_TMP" | docker login -u "$DOCKER_USER_TMP" --password-stdin')
             if (rc != 0) {
               error("Docker login failed (exit code ${rc}). Check dockerhub-credentials (use Docker Hub token/password).")
+            } else {
+              echo "Docker login succeeded as ${env.DOCKER_USER}"
             }
-            echo "Docker login succeeded as ${env.DOCKER_USER}"
           }
         }
       }
@@ -64,6 +64,7 @@ pipeline {
           echo "  - ${backendTag}"
           echo "  - ${frontendTag}"
 
+          // Build backend (Dockerfile or DockerFile)
           if (fileExists('backend/Dockerfile')) {
             sh "docker build -t ${backendTag} -f backend/Dockerfile backend"
           } else if (fileExists('backend/DockerFile')) {
@@ -72,6 +73,7 @@ pipeline {
             error "Backend Dockerfile not found (backend/Dockerfile or backend/DockerFile)."
           }
 
+          // Build frontend (Dockerfile or DockerFile)
           if (fileExists('frontend/Dockerfile')) {
             sh "docker build -t ${frontendTag} -f frontend/Dockerfile frontend"
           } else if (fileExists('frontend/DockerFile')) {
@@ -80,87 +82,70 @@ pipeline {
             error "Frontend Dockerfile not found (frontend/Dockerfile or frontend/DockerFile)."
           }
 
+          // Push versioned tags
           sh "docker push ${backendTag}"
           sh "docker push ${frontendTag}"
 
-          // also update :latest so compose referencing :latest works
-          sh "docker tag ${backendTag} ${env.BACKEND_REPO}:latest || true"
-          sh "docker tag ${frontendTag} ${env.FRONTEND_REPO}:latest || true"
-          sh "docker push ${env.BACKEND_REPO}:latest || true"
-          sh "docker push ${env.FRONTEND_REPO}:latest || true"
+          // Also tag & push :latest so existing docker-compose.yml (which references :latest) works
+          sh "docker tag ${backendTag} ${env.BACKEND_REPO}:latest"
+          sh "docker tag ${frontendTag} ${env.FRONTEND_REPO}:latest"
+          sh "docker push ${env.BACKEND_REPO}:latest"
+          sh "docker push ${env.FRONTEND_REPO}:latest"
 
           echo "✅ Images pushed: ${backendTag}, ${frontendTag}, and :latest."
         }
       }
     }
 
-    stage('Deploy to EC2 (change host backend port)') {
+    stage('Deploy to EC2') {
       steps {
         script {
+          // compute tag ON JENKINS so we pass exact strings to EC2
           def tag = env.BUILD_NUMBER ?: 'latest'
           def backendImageWithTag = "${env.BACKEND_REPO}:${tag}"
           def frontendImageWithTag = "${env.FRONTEND_REPO}:${tag}"
 
           withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-key', keyFileVariable: 'EC2_KEY_FILE', usernameVariable: 'EC2_USER_FROM_CRED')]) {
-            // generate a deploy script we will copy to EC2 and run as sudo
+            // create a small deploy script (on the Jenkins agent) with the actual image tags
             def deployScript = """#!/bin/bash
 set -euo pipefail
 
 APP_DIR="/home/${EC2_USER_FROM_CRED}/app"
-COMPOSE_FILE="\$APP_DIR/docker-compose.yml"
-
 echo "Ensuring app dir exists: \$APP_DIR"
 mkdir -p "\$APP_DIR"
 chown ${EC2_USER_FROM_CRED}:${EC2_USER_FROM_CRED} "\$APP_DIR" || true
+cd "\$APP_DIR"
 
 echo "Pulling images: ${backendImageWithTag} , ${frontendImageWithTag}"
 docker pull ${backendImageWithTag} || true
 docker pull ${frontendImageWithTag} || true
 
-if [ ! -f "\$COMPOSE_FILE" ]; then
-  echo "ERROR: \$COMPOSE_FILE not found. Exiting."
+if [ ! -f docker-compose.yml ] && [ ! -f docker-compose.yaml ]; then
+  echo "ERROR: docker-compose.yml not found in \$APP_DIR"
   exit 2
 fi
 
-# Replace backend host port mapping in docker-compose.yml
-# We expect a line like: - "8080:8080" (or with single quotes). Replace the left-side host port.
-BACKEND_HOST_PORT=${BACKEND_HOST_PORT}
-echo "Updating backend host port mapping in \$COMPOSE_FILE -> host:\$BACKEND_HOST_PORT:container:8080"
-# Use sed to replace the first occurrence of host-port mapping for backend.
-# This sed handles double quotes, single quotes and no quotes around the mapping.
-# It replaces the left side of a mapping that ends with :8080
-# Backup first
-cp "\$COMPOSE_FILE" "\$COMPOSE_FILE.bak.$(date +%s)" || true
-
-# Try to replace occurrences like "8080:8080", '8080:8080', 8080:8080
-# If there is more than one mapping to :8080, this will replace them all — adjust if that's undesirable.
-sed -i -E \"s#(['\\\"]?)[0-9]{1,5}:8080\\1#\\1${BACKEND_HOST_PORT}:8080\\1#g\" "\$COMPOSE_FILE" || true
-
-echo "Updated docker-compose.yml (showing diff):"
-diff --unified=0 "\$COMPOSE_FILE.bak."* "\$COMPOSE_FILE" || true
-echo "Restarting docker compose..."
-
+echo "Restarting compose..."
 if command -v docker-compose >/dev/null 2>&1; then
-  docker-compose -f "\$COMPOSE_FILE" down || true
-  docker-compose -f "\$COMPOSE_FILE" up -d
+  docker-compose down || true
+  docker-compose up -d
 else
-  docker compose -f "\$COMPOSE_FILE" down || true
-  docker compose -f "\$COMPOSE_FILE" up -d
+  docker compose down || true
+  docker compose up -d
 fi
 
-echo "Deploy finished."
+echo "Deploy script finished."
 """
-
             writeFile file: 'jenkins_deploy.sh', text: deployScript
             sh 'chmod +x jenkins_deploy.sh'
 
-            // copy and run on remote EC2
+            // copy the script to remote and execute it
             sh """
               scp -o StrictHostKeyChecking=no -i "$EC2_KEY_FILE" jenkins_deploy.sh ${EC2_USER_FROM_CRED}@${EC2_HOST}:/tmp/jenkins_deploy.sh
               ssh -o StrictHostKeyChecking=no -i "$EC2_KEY_FILE" ${EC2_USER_FROM_CRED}@${EC2_HOST} 'sudo chmod +x /tmp/jenkins_deploy.sh && sudo /bin/bash /tmp/jenkins_deploy.sh'
             """
 
-            // cleanup local
+            // cleanup local script
             sh 'rm -f jenkins_deploy.sh || true'
           }
         }
@@ -170,12 +155,16 @@ echo "Deploy finished."
 
   post {
     success {
-      echo '✅ Pipeline finished successfully.'
-      script { sh 'docker logout || true' }
+      echo '✅ Deployment finished (pipeline success).'
+      script {
+        sh 'docker logout || true'
+      }
     }
     failure {
       echo '❌ Pipeline failed — inspect logs.'
-      script { sh 'docker logout || true' }
+      script {
+        sh 'docker logout || true'
+      }
     }
   }
 }
