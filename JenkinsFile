@@ -5,7 +5,7 @@ pipeline {
         // repo names on Docker Hub (your actual namespaces)
         BACKEND_REPO = 'gerryaj2004/proactively-backend'
         FRONTEND_REPO = 'gerryaj2004/proactively-frontend'
-        EC2_HOST = 'your-ec2-public-ip'   // <-- replace with your EC2 public IP or hostname
+        EC2_HOST = '13.201.4.53'   // <-- replace with your EC2 public IP or hostname
     }
 
     stages {
