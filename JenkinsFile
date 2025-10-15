@@ -2,9 +2,10 @@ pipeline {
   agent any
 
   environment {
-    BACKEND_REPO  = 'gerryaj2004/proactively-backend'
-    FRONTEND_REPO = 'gerryaj2004/proactively-frontend'
-    EC2_HOST      = '13.201.4.53'
+    BACKEND_REPO      = 'gerryaj2004/proactively-backend'
+    FRONTEND_REPO     = 'gerryaj2004/proactively-frontend'
+    EC2_HOST          = '13.201.4.53'
+    BACKEND_HOST_PORT = '8081'     // <-- host port to map to container's 8080
   }
 
   stages {
@@ -82,7 +83,7 @@ pipeline {
           sh "docker push ${backendTag}"
           sh "docker push ${frontendTag}"
 
-          // also update :latest so your docker-compose referencing :latest works
+          // also update :latest so compose referencing :latest works
           sh "docker tag ${backendTag} ${env.BACKEND_REPO}:latest || true"
           sh "docker tag ${frontendTag} ${env.FRONTEND_REPO}:latest || true"
           sh "docker push ${env.BACKEND_REPO}:latest || true"
@@ -93,7 +94,7 @@ pipeline {
       }
     }
 
-    stage('Deploy to EC2') {
+    stage('Deploy to EC2 (change host backend port)') {
       steps {
         script {
           def tag = env.BUILD_NUMBER ?: 'latest'
@@ -101,83 +102,59 @@ pipeline {
           def frontendImageWithTag = "${env.FRONTEND_REPO}:${tag}"
 
           withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-key', keyFileVariable: 'EC2_KEY_FILE', usernameVariable: 'EC2_USER_FROM_CRED')]) {
-            // build deploy script that will run on EC2
+            // generate a deploy script we will copy to EC2 and run as sudo
             def deployScript = """#!/bin/bash
 set -euo pipefail
 
 APP_DIR="/home/${EC2_USER_FROM_CRED}/app"
+COMPOSE_FILE="\$APP_DIR/docker-compose.yml"
+
 echo "Ensuring app dir exists: \$APP_DIR"
 mkdir -p "\$APP_DIR"
 chown ${EC2_USER_FROM_CRED}:${EC2_USER_FROM_CRED} "\$APP_DIR" || true
-cd "\$APP_DIR"
 
 echo "Pulling images: ${backendImageWithTag} , ${frontendImageWithTag}"
 docker pull ${backendImageWithTag} || true
 docker pull ${frontendImageWithTag} || true
 
-#
-# If something is already listening on port 8080, stop it:
-#
-# 1) Try to detect docker containers that publish 8080 and remove them.
-EXISTING_CONTAINERS=\$(docker ps --format '{{.ID}} {{.Ports}}' | awk '/[:|,]8080[,:>]/ {print \$1}' || true)
-if [ -n "\$EXISTING_CONTAINERS" ]; then
-  echo "Found Docker container(s) exposing port 8080: \$EXISTING_CONTAINERS"
-  for c in \$EXISTING_CONTAINERS; do
-    echo "Stopping and removing container \$c"
-    docker rm -f \$c || true
-  done
-else
-  echo "No Docker container publishing 8080 found."
-fi
-
-# 2) If still port 8080 is in use by a non-docker process, try to find and kill it.
-if ss -ltn '( sport = :8080 )' 2>/dev/null | grep -q LISTEN 2>/dev/null; then
-  echo "A process appears to be listening on :8080. Attempting to identify and kill it."
-  PIDS=\$(ss -ltnp '( sport = :8080 )' 2>/dev/null | awk -F 'pid=' '{for(i=2;i<=NF;i++){sub(/,.*$/,"",\$i); print \$i}}' | tr '\\n' ' ' || true)
-  if [ -n "\$PIDS" ]; then
-    echo "Killing PIDs: \$PIDS"
-    for p in \$PIDS; do
-      kill -9 \$p || true
-    done
-  else
-    # fallback to lsof if ss didn't provide pids
-    if command -v lsof >/dev/null 2>&1; then
-      PIDS=\$(lsof -t -iTCP:8080 -sTCP:LISTEN || true)
-      if [ -n "\$PIDS" ]; then
-        echo "Killing PIDs from lsof: \$PIDS"
-        for p in \$PIDS; do
-          kill -9 \$p || true
-        done
-      fi
-    fi
-  fi
-else
-  echo "No non-docker process listening on 8080."
-fi
-
-# Now safe to restart compose
-echo "Restarting compose..."
-if [ -f docker-compose.yml ] || [ -f docker-compose.yaml ]; then
-  if command -v docker-compose >/dev/null 2>&1; then
-    docker-compose down || true
-    docker-compose up -d
-  else
-    docker compose down || true
-    docker compose up -d
-  fi
-  echo "Docker compose restarted."
-else
-  echo "ERROR: docker-compose.yml not found in \$APP_DIR"
+if [ ! -f "\$COMPOSE_FILE" ]; then
+  echo "ERROR: \$COMPOSE_FILE not found. Exiting."
   exit 2
 fi
 
-echo "Deploy script finished."
+# Replace backend host port mapping in docker-compose.yml
+# We expect a line like: - "8080:8080" (or with single quotes). Replace the left-side host port.
+BACKEND_HOST_PORT=${BACKEND_HOST_PORT}
+echo "Updating backend host port mapping in \$COMPOSE_FILE -> host:\$BACKEND_HOST_PORT:container:8080"
+# Use sed to replace the first occurrence of host-port mapping for backend.
+# This sed handles double quotes, single quotes and no quotes around the mapping.
+# It replaces the left side of a mapping that ends with :8080
+# Backup first
+cp "\$COMPOSE_FILE" "\$COMPOSE_FILE.bak.$(date +%s)" || true
+
+# Try to replace occurrences like "8080:8080", '8080:8080', 8080:8080
+# If there is more than one mapping to :8080, this will replace them all — adjust if that's undesirable.
+sed -i -E \"s#(['\\\"]?)[0-9]{1,5}:8080\\1#\\1${BACKEND_HOST_PORT}:8080\\1#g\" "\$COMPOSE_FILE" || true
+
+echo "Updated docker-compose.yml (showing diff):"
+diff --unified=0 "\$COMPOSE_FILE.bak."* "\$COMPOSE_FILE" || true
+echo "Restarting docker compose..."
+
+if command -v docker-compose >/dev/null 2>&1; then
+  docker-compose -f "\$COMPOSE_FILE" down || true
+  docker-compose -f "\$COMPOSE_FILE" up -d
+else
+  docker compose -f "\$COMPOSE_FILE" down || true
+  docker compose -f "\$COMPOSE_FILE" up -d
+fi
+
+echo "Deploy finished."
 """
+
             writeFile file: 'jenkins_deploy.sh', text: deployScript
             sh 'chmod +x jenkins_deploy.sh'
 
             // copy and run on remote EC2
-            // use scp/ssh with provided keyfile
             sh """
               scp -o StrictHostKeyChecking=no -i "$EC2_KEY_FILE" jenkins_deploy.sh ${EC2_USER_FROM_CRED}@${EC2_HOST}:/tmp/jenkins_deploy.sh
               ssh -o StrictHostKeyChecking=no -i "$EC2_KEY_FILE" ${EC2_USER_FROM_CRED}@${EC2_HOST} 'sudo chmod +x /tmp/jenkins_deploy.sh && sudo /bin/bash /tmp/jenkins_deploy.sh'
@@ -193,7 +170,7 @@ echo "Deploy script finished."
 
   post {
     success {
-      echo '✅ Deployment finished (pipeline success).'
+      echo '✅ Pipeline finished successfully.'
       script { sh 'docker logout || true' }
     }
     failure {
