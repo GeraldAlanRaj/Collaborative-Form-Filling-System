@@ -1,142 +1,181 @@
 pipeline {
-    agent any
+  agent any
 
-    environment {
-        // repo names on Docker Hub (your actual namespaces)
-        BACKEND_REPO = 'gerryaj2004/proactively-backend'
-        FRONTEND_REPO = 'gerryaj2004/proactively-frontend'
-        EC2_HOST = '13.201.4.53'   // <-- replace with your EC2 public IP or hostname
+  environment {
+    BACKEND_REPO = 'gerryaj2004/proactively-backend'
+    FRONTEND_REPO = 'gerryaj2004/proactively-frontend'
+    EC2_HOST = '13.201.4.53'
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        echo '📥 Checking out source code...'
+        checkout scm
+      }
     }
 
-    stages {
-        stage('Checkout') {
-            steps {
-                echo '📥 Checking out source code...'
-                checkout scm
-            }
+    stage('Build Backend') {
+      steps {
+        dir('backend') {
+          echo '📦 Installing backend dependencies...'
+          sh 'npm install'
+          echo '⚙️ Building backend (if build script exists)...'
+          sh 'npm run build || echo "No build script found in backend/package.json; skipping build."'
         }
-
-        stage('Build Backend') {
-            steps {
-                dir('backend') {
-                    echo '📦 Installing backend dependencies...'
-                    sh 'npm install'
-                    echo '⚙️ Building backend (if build script exists)...'
-                    sh 'npm run build || echo "No build script found in backend/package.json; skipping build."'
-                }
-            }
-        }
-
-        stage('Build Frontend') {
-            steps {
-                dir('frontend') {
-                    echo '📦 Installing frontend dependencies...'
-                    sh 'npm install'
-                    echo '⚙️ Building frontend...'
-                    sh 'npm run build'
-                }
-            }
-        }
-
-        stage('Docker Login (use Jenkins credential)') {
-            steps {
-                script {
-                    // Ensure credentialId 'dockerhub-credentials' exists (Username with password)
-                    withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER_TMP', passwordVariable: 'DOCKER_PASS_TMP')]) {
-                        env.DOCKER_USER = DOCKER_USER_TMP
-                        def rc = sh(returnStatus: true, script: 'echo "$DOCKER_PASS_TMP" | docker login -u "$DOCKER_USER_TMP" --password-stdin')
-                        if (rc != 0) {
-                            error("Docker login failed (exit code ${rc}). Check dockerhub-credentials username/password (use a Docker Hub token).")
-                        } else {
-                            echo "Docker login succeeded as ${env.DOCKER_USER}"
-                        }
-                    }
-                }
-            }
-        }
-
-        stage('Build & Push Images') {
-            steps {
-                script {
-                    // derive tags (use BUILD_NUMBER if available)
-                    def tag = env.BUILD_NUMBER ?: 'latest'
-                    def backendImage = "${env.BACKEND_REPO}:${tag}"
-                    def frontendImage = "${env.FRONTEND_REPO}:${tag}"
-
-                    echo "🐳 Will build and push:"
-                    echo "  - ${backendImage}"
-                    echo "  - ${frontendImage}"
-
-                    // Backend build (detect Dockerfile / DockerFile)
-                    if (fileExists('backend/Dockerfile')) {
-                        sh "docker build -t ${backendImage} -f backend/Dockerfile backend"
-                    } else if (fileExists('backend/DockerFile')) {
-                        sh "docker build -t ${backendImage} -f backend/DockerFile backend"
-                    } else {
-                        error "Backend Dockerfile not found (backend/Dockerfile or backend/DockerFile)."
-                    }
-
-                    // Frontend build (detect Dockerfile / DockerFile)
-                    if (fileExists('frontend/Dockerfile')) {
-                        sh "docker build -t ${frontendImage} -f frontend/Dockerfile frontend"
-                    } else if (fileExists('frontend/DockerFile')) {
-                        sh "docker build -t ${frontendImage} -f frontend/DockerFile frontend"
-                    } else {
-                        error "Frontend Dockerfile not found (frontend/Dockerfile or frontend/DockerFile)."
-                    }
-
-                    echo '📤 Pushing images to DockerHub...'
-                    def rc1 = sh(returnStatus: true, script: "docker push ${backendImage}")
-                    if (rc1 != 0) {
-                        error("Failed to push ${backendImage}. Ensure Docker Hub repo exists and user ${env.DOCKER_USER} can push.")
-                    }
-                    def rc2 = sh(returnStatus: true, script: "docker push ${frontendImage}")
-                    if (rc2 != 0) {
-                        error("Failed to push ${frontendImage}. Ensure Docker Hub repo exists and user ${env.DOCKER_USER} can push.")
-                    }
-                }
-            }
-        }
-
-        stage('Deploy to EC2') {
-            steps {
-                echo '🚀 Deploying on EC2 via SSH...'
-                script {
-                    withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-key', keyFileVariable: 'EC2_KEY_FILE', usernameVariable: 'EC2_USER_FROM_CRED')]) {
-                        sh """
-                        chmod 600 "$EC2_KEY_FILE"
-                        ssh -o StrictHostKeyChecking=no -i "$EC2_KEY_FILE" ${EC2_USER_FROM_CRED}@${EC2_HOST} '
-                            set -e
-                            echo "Pulling images..."
-                            docker pull ${env.BACKEND_REPO}:${env.BUILD_NUMBER ?: "latest"}
-                            docker pull ${env.FRONTEND_REPO}:${env.BUILD_NUMBER ?: "latest"}
-                            cd /home/${EC2_USER_FROM_CRED}/app || { echo "app dir not found"; exit 1; }
-                            docker compose down || true
-                            docker compose up -d
-                        '
-                        """
-                    }
-                }
-            }
-        }
+      }
     }
 
-    post {
-        success {
-            echo '✅ Deployment successful!'
-            script {
-                node {
-                    sh 'docker logout'
-                }
-            }
+    stage('Build Frontend') {
+      steps {
+        dir('frontend') {
+          echo '📦 Installing frontend dependencies...'
+          sh 'npm install'
+          echo '⚙️ Building frontend...'
+          sh 'npm run build'
         }
-        failure {
-            echo '❌ Pipeline failed. Check logs for details.'
-            script {
-                node {
-                    sh 'docker logout || true'
-                }
-            }
-        }
+      }
     }
+
+    stage('Docker Login (use Jenkins credential)') {
+      steps {
+        script {
+          withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER_TMP', passwordVariable: 'DOCKER_PASS_TMP')]) {
+            env.DOCKER_USER = DOCKER_USER_TMP
+            def rc = sh(returnStatus: true, script: 'echo "$DOCKER_PASS_TMP" | docker login -u "$DOCKER_USER_TMP" --password-stdin')
+            if (rc != 0) {
+              error("Docker login failed (exit code ${rc}). Check dockerhub-credentials username/password (use a Docker Hub token).")
+            } else {
+              echo "Docker login succeeded as ${env.DOCKER_USER}"
+            }
+          }
+        }
+      }
+    }
+
+    stage('Build & Push Images') {
+      steps {
+        script {
+          def tag = env.BUILD_NUMBER ?: 'latest'
+          def backendImage = "${env.BACKEND_REPO}:${tag}"
+          def frontendImage = "${env.FRONTEND_REPO}:${tag}"
+
+          echo "🐳 Will build and push:"
+          echo "  - ${backendImage}"
+          echo "  - ${frontendImage}"
+
+          // Build backend (detect Dockerfile name)
+          if (fileExists('backend/Dockerfile')) {
+            sh "docker build -t ${backendImage} -f backend/Dockerfile backend"
+          } else if (fileExists('backend/DockerFile')) {
+            sh "docker build -t ${backendImage} -f backend/DockerFile backend"
+          } else {
+            error "Backend Dockerfile not found (backend/Dockerfile or backend/DockerFile)."
+          }
+
+          // Build frontend (detect Dockerfile name)
+          if (fileExists('frontend/Dockerfile')) {
+            sh "docker build -t ${frontendImage} -f frontend/Dockerfile frontend"
+          } else if (fileExists('frontend/DockerFile')) {
+            sh "docker build -t ${frontendImage} -f frontend/DockerFile frontend"
+          } else {
+            error "Frontend Dockerfile not found (frontend/Dockerfile or frontend/DockerFile)."
+          }
+
+          echo '📤 Pushing images to DockerHub...'
+
+          // Push versioned tags
+          sh "docker push ${backendImage}"
+          sh "docker push ${frontendImage}"
+
+          // Tag and push latest (so docker-compose that references :latest works)
+          sh "docker tag ${backendImage} ${env.BACKEND_REPO}:latest"
+          sh "docker tag ${frontendImage} ${env.FRONTEND_REPO}:latest"
+          sh "docker push ${env.BACKEND_REPO}:latest"
+          sh "docker push ${env.FRONTEND_REPO}:latest"
+
+          echo "✅ Images pushed: ${backendImage}, ${frontendImage}, and :latest tags."
+        }
+      }
+    }
+
+    stage('Deploy to EC2') {
+      steps {
+        echo '🚀 Deploying on EC2 via SSH...'
+        script {
+          withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-key', keyFileVariable: 'EC2_KEY_FILE', usernameVariable: 'EC2_USER_FROM_CRED')]) {
+            // Use a literal heredoc to avoid accidental Groovy interpolation of secrets.
+            sh '''#!/bin/bash
+set -euo pipefail
+chmod 600 "$EC2_KEY_FILE"
+echo "SSH -> ${EC2_USER_FROM_CRED}@${EC2_HOST}"
+
+# Remote commands: ensure app dir exists, ensure docker-compose.yml present, pull images and restart compose.
+ssh -o StrictHostKeyChecking=no -i "$EC2_KEY_FILE" ${EC2_USER_FROM_CRED}@${EC2_HOST} <<'REMOTE_EOF'
+set -e
+
+APP_DIR="/home/'"$EC2_USER_FROM_CRED"'/'"
+# Normalize APP_DIR (avoid accidental substitution)
+APP_DIR="/home/${USER:-ec2-user}/app"
+# If the above doesn't reflect EC2 user, we will fallback to /home/ec2-user/app
+if [ -z "${APP_DIR}" ]; then
+  APP_DIR="/home/ec2-user/app"
+fi
+
+# Create app dir if missing
+if [ ! -d "/home/${USER:-ec2-user}/app" ]; then
+  echo "App directory not found. Creating /home/${USER:-ec2-user}/app"
+  mkdir -p "/home/${USER:-ec2-user}/app"
+  chown ${USER:-ec2-user}:${USER:-ec2-user} "/home/${USER:-ec2-user}/app" || true
+fi
+
+cd /home/${USER:-ec2-user}/app || { echo "app dir not found"; exit 1; }
+
+# Fail with helpful message if compose file missing
+if [ ! -f docker-compose.yml ] && [ ! -f docker-compose.yaml ]; then
+  echo "ERROR: docker-compose.yml not found in /home/${USER:-ec2-user}/app. Upload it and re-run the pipeline."
+  exit 2
+fi
+
+echo "Pulling images (build tag if present, else latest)..."
+# Pull images with build number if provided by the pipeline (the pipeline pushes both build tag and latest)
+docker pull ${BACKEND_REPO}:${BUILD_NUMBER:-latest} || true
+docker pull ${FRONTEND_REPO}:${BUILD_NUMBER:-latest} || true
+
+echo "Restarting compose..."
+# Use docker compose if available else docker-compose
+if command -v docker-compose >/dev/null 2>&1; then
+  docker-compose down || true
+  docker-compose up -d
+else
+  docker compose down || true
+  docker compose up -d
+fi
+
+REMOTE_EOF
+'''
+          }
+        }
+      }
+    }
+  }
+
+  post {
+    success {
+      echo '✅ Deployment successful!'
+      script {
+        node {
+          sh 'docker logout || true'
+        }
+      }
+    }
+    failure {
+      echo '❌ Pipeline failed. Check logs for details.'
+      script {
+        node {
+          sh 'docker logout || true'
+        }
+      }
+    }
+  }
 }
