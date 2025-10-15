@@ -2,9 +2,9 @@ pipeline {
   agent any
 
   environment {
-    BACKEND_REPO = 'gerryaj2004/proactively-backend'
+    BACKEND_REPO  = 'gerryaj2004/proactively-backend'
     FRONTEND_REPO = 'gerryaj2004/proactively-frontend'
-    EC2_HOST = '13.201.4.53'
+    EC2_HOST      = '13.201.4.53'
   }
 
   stages {
@@ -44,7 +44,7 @@ pipeline {
             env.DOCKER_USER = DOCKER_USER_TMP
             def rc = sh(returnStatus: true, script: 'echo "$DOCKER_PASS_TMP" | docker login -u "$DOCKER_USER_TMP" --password-stdin')
             if (rc != 0) {
-              error("Docker login failed (exit code ${rc}). Check dockerhub-credentials username/password (use a Docker Hub token).")
+              error("Docker login failed (exit code ${rc}). Check dockerhub-credentials (use Docker Hub token/password).")
             } else {
               echo "Docker login succeeded as ${env.DOCKER_USER}"
             }
@@ -57,93 +57,75 @@ pipeline {
       steps {
         script {
           def tag = env.BUILD_NUMBER ?: 'latest'
-          def backendImage = "${env.BACKEND_REPO}:${tag}"
-          def frontendImage = "${env.FRONTEND_REPO}:${tag}"
+          def backendTag = "${env.BACKEND_REPO}:${tag}"
+          def frontendTag = "${env.FRONTEND_REPO}:${tag}"
 
-          echo "🐳 Will build and push:"
-          echo "  - ${backendImage}"
-          echo "  - ${frontendImage}"
+          echo "🐳 Building and pushing images:"
+          echo "  - ${backendTag}"
+          echo "  - ${frontendTag}"
 
-          // Build backend (detect Dockerfile name)
+          // Build backend (Dockerfile or DockerFile)
           if (fileExists('backend/Dockerfile')) {
-            sh "docker build -t ${backendImage} -f backend/Dockerfile backend"
+            sh "docker build -t ${backendTag} -f backend/Dockerfile backend"
           } else if (fileExists('backend/DockerFile')) {
-            sh "docker build -t ${backendImage} -f backend/DockerFile backend"
+            sh "docker build -t ${backendTag} -f backend/DockerFile backend"
           } else {
             error "Backend Dockerfile not found (backend/Dockerfile or backend/DockerFile)."
           }
 
-          // Build frontend (detect Dockerfile name)
+          // Build frontend (Dockerfile or DockerFile)
           if (fileExists('frontend/Dockerfile')) {
-            sh "docker build -t ${frontendImage} -f frontend/Dockerfile frontend"
+            sh "docker build -t ${frontendTag} -f frontend/Dockerfile frontend"
           } else if (fileExists('frontend/DockerFile')) {
-            sh "docker build -t ${frontendImage} -f frontend/DockerFile frontend"
+            sh "docker build -t ${frontendTag} -f frontend/DockerFile frontend"
           } else {
             error "Frontend Dockerfile not found (frontend/Dockerfile or frontend/DockerFile)."
           }
 
-          echo '📤 Pushing images to DockerHub...'
-
           // Push versioned tags
-          sh "docker push ${backendImage}"
-          sh "docker push ${frontendImage}"
+          sh "docker push ${backendTag}"
+          sh "docker push ${frontendTag}"
 
-          // Tag and push latest (so docker-compose that references :latest works)
-          sh "docker tag ${backendImage} ${env.BACKEND_REPO}:latest"
-          sh "docker tag ${frontendImage} ${env.FRONTEND_REPO}:latest"
+          // Also tag & push :latest so existing docker-compose.yml (which references :latest) works
+          sh "docker tag ${backendTag} ${env.BACKEND_REPO}:latest"
+          sh "docker tag ${frontendTag} ${env.FRONTEND_REPO}:latest"
           sh "docker push ${env.BACKEND_REPO}:latest"
           sh "docker push ${env.FRONTEND_REPO}:latest"
 
-          echo "✅ Images pushed: ${backendImage}, ${frontendImage}, and :latest tags."
+          echo "✅ Images pushed: ${backendTag}, ${frontendTag}, and :latest."
         }
       }
     }
 
     stage('Deploy to EC2') {
       steps {
-        echo '🚀 Deploying on EC2 via SSH...'
         script {
+          // compute tag ON JENKINS so we pass exact strings to EC2
+          def tag = env.BUILD_NUMBER ?: 'latest'
+          def backendImageWithTag = "${env.BACKEND_REPO}:${tag}"
+          def frontendImageWithTag = "${env.FRONTEND_REPO}:${tag}"
+
           withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-key', keyFileVariable: 'EC2_KEY_FILE', usernameVariable: 'EC2_USER_FROM_CRED')]) {
-            // Use a literal heredoc to avoid accidental Groovy interpolation of secrets.
-            sh '''#!/bin/bash
+            // create a small deploy script (on the Jenkins agent) with the actual image tags
+            def deployScript = """#!/bin/bash
 set -euo pipefail
-chmod 600 "$EC2_KEY_FILE"
-echo "SSH -> ${EC2_USER_FROM_CRED}@${EC2_HOST}"
 
-# Remote commands: ensure app dir exists, ensure docker-compose.yml present, pull images and restart compose.
-ssh -o StrictHostKeyChecking=no -i "$EC2_KEY_FILE" ${EC2_USER_FROM_CRED}@${EC2_HOST} <<'REMOTE_EOF'
-set -e
+APP_DIR="/home/${EC2_USER_FROM_CRED}/app"
+echo "Ensuring app dir exists: \$APP_DIR"
+mkdir -p "\$APP_DIR"
+chown ${EC2_USER_FROM_CRED}:${EC2_USER_FROM_CRED} "\$APP_DIR" || true
+cd "\$APP_DIR"
 
-APP_DIR="/home/'"$EC2_USER_FROM_CRED"'/'"
-# Normalize APP_DIR (avoid accidental substitution)
-APP_DIR="/home/${USER:-ec2-user}/app"
-# If the above doesn't reflect EC2 user, we will fallback to /home/ec2-user/app
-if [ -z "${APP_DIR}" ]; then
-  APP_DIR="/home/ec2-user/app"
-fi
+echo "Pulling images: ${backendImageWithTag} , ${frontendImageWithTag}"
+docker pull ${backendImageWithTag} || true
+docker pull ${frontendImageWithTag} || true
 
-# Create app dir if missing
-if [ ! -d "/home/${USER:-ec2-user}/app" ]; then
-  echo "App directory not found. Creating /home/${USER:-ec2-user}/app"
-  mkdir -p "/home/${USER:-ec2-user}/app"
-  chown ${USER:-ec2-user}:${USER:-ec2-user} "/home/${USER:-ec2-user}/app" || true
-fi
-
-cd /home/${USER:-ec2-user}/app || { echo "app dir not found"; exit 1; }
-
-# Fail with helpful message if compose file missing
 if [ ! -f docker-compose.yml ] && [ ! -f docker-compose.yaml ]; then
-  echo "ERROR: docker-compose.yml not found in /home/${USER:-ec2-user}/app. Upload it and re-run the pipeline."
+  echo "ERROR: docker-compose.yml not found in \$APP_DIR"
   exit 2
 fi
 
-echo "Pulling images (build tag if present, else latest)..."
-# Pull images with build number if provided by the pipeline (the pipeline pushes both build tag and latest)
-docker pull ${BACKEND_REPO}:${BUILD_NUMBER:-latest} || true
-docker pull ${FRONTEND_REPO}:${BUILD_NUMBER:-latest} || true
-
 echo "Restarting compose..."
-# Use docker compose if available else docker-compose
 if command -v docker-compose >/dev/null 2>&1; then
   docker-compose down || true
   docker-compose up -d
@@ -152,29 +134,36 @@ else
   docker compose up -d
 fi
 
-REMOTE_EOF
-'''
+echo "Deploy script finished."
+"""
+            writeFile file: 'jenkins_deploy.sh', text: deployScript
+            sh 'chmod +x jenkins_deploy.sh'
+
+            // copy the script to remote and execute it
+            sh """
+              scp -o StrictHostKeyChecking=no -i "$EC2_KEY_FILE" jenkins_deploy.sh ${EC2_USER_FROM_CRED}@${EC2_HOST}:/tmp/jenkins_deploy.sh
+              ssh -o StrictHostKeyChecking=no -i "$EC2_KEY_FILE" ${EC2_USER_FROM_CRED}@${EC2_HOST} 'sudo chmod +x /tmp/jenkins_deploy.sh && sudo /bin/bash /tmp/jenkins_deploy.sh'
+            """
+
+            // cleanup local script
+            sh 'rm -f jenkins_deploy.sh || true'
           }
         }
       }
     }
-  }
+  } // stages
 
   post {
     success {
-      echo '✅ Deployment successful!'
+      echo '✅ Deployment finished (pipeline success).'
       script {
-        node {
-          sh 'docker logout || true'
-        }
+        sh 'docker logout || true'
       }
     }
     failure {
-      echo '❌ Pipeline failed. Check logs for details.'
+      echo '❌ Pipeline failed — inspect logs.'
       script {
-        node {
-          sh 'docker logout || true'
-        }
+        sh 'docker logout || true'
       }
     }
   }
