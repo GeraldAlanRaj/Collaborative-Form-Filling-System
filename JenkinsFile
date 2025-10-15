@@ -45,9 +45,8 @@ pipeline {
             def rc = sh(returnStatus: true, script: 'echo "$DOCKER_PASS_TMP" | docker login -u "$DOCKER_USER_TMP" --password-stdin')
             if (rc != 0) {
               error("Docker login failed (exit code ${rc}). Check dockerhub-credentials (use Docker Hub token/password).")
-            } else {
-              echo "Docker login succeeded as ${env.DOCKER_USER}"
             }
+            echo "Docker login succeeded as ${env.DOCKER_USER}"
           }
         }
       }
@@ -64,7 +63,6 @@ pipeline {
           echo "  - ${backendTag}"
           echo "  - ${frontendTag}"
 
-          // Build backend (Dockerfile or DockerFile)
           if (fileExists('backend/Dockerfile')) {
             sh "docker build -t ${backendTag} -f backend/Dockerfile backend"
           } else if (fileExists('backend/DockerFile')) {
@@ -73,7 +71,6 @@ pipeline {
             error "Backend Dockerfile not found (backend/Dockerfile or backend/DockerFile)."
           }
 
-          // Build frontend (Dockerfile or DockerFile)
           if (fileExists('frontend/Dockerfile')) {
             sh "docker build -t ${frontendTag} -f frontend/Dockerfile frontend"
           } else if (fileExists('frontend/DockerFile')) {
@@ -82,15 +79,14 @@ pipeline {
             error "Frontend Dockerfile not found (frontend/Dockerfile or frontend/DockerFile)."
           }
 
-          // Push versioned tags
           sh "docker push ${backendTag}"
           sh "docker push ${frontendTag}"
 
-          // Also tag & push :latest so existing docker-compose.yml (which references :latest) works
-          sh "docker tag ${backendTag} ${env.BACKEND_REPO}:latest"
-          sh "docker tag ${frontendTag} ${env.FRONTEND_REPO}:latest"
-          sh "docker push ${env.BACKEND_REPO}:latest"
-          sh "docker push ${env.FRONTEND_REPO}:latest"
+          // also update :latest so your docker-compose referencing :latest works
+          sh "docker tag ${backendTag} ${env.BACKEND_REPO}:latest || true"
+          sh "docker tag ${frontendTag} ${env.FRONTEND_REPO}:latest || true"
+          sh "docker push ${env.BACKEND_REPO}:latest || true"
+          sh "docker push ${env.FRONTEND_REPO}:latest || true"
 
           echo "✅ Images pushed: ${backendTag}, ${frontendTag}, and :latest."
         }
@@ -100,13 +96,12 @@ pipeline {
     stage('Deploy to EC2') {
       steps {
         script {
-          // compute tag ON JENKINS so we pass exact strings to EC2
           def tag = env.BUILD_NUMBER ?: 'latest'
           def backendImageWithTag = "${env.BACKEND_REPO}:${tag}"
           def frontendImageWithTag = "${env.FRONTEND_REPO}:${tag}"
 
           withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-key', keyFileVariable: 'EC2_KEY_FILE', usernameVariable: 'EC2_USER_FROM_CRED')]) {
-            // create a small deploy script (on the Jenkins agent) with the actual image tags
+            // build deploy script that will run on EC2
             def deployScript = """#!/bin/bash
 set -euo pipefail
 
@@ -120,18 +115,60 @@ echo "Pulling images: ${backendImageWithTag} , ${frontendImageWithTag}"
 docker pull ${backendImageWithTag} || true
 docker pull ${frontendImageWithTag} || true
 
-if [ ! -f docker-compose.yml ] && [ ! -f docker-compose.yaml ]; then
-  echo "ERROR: docker-compose.yml not found in \$APP_DIR"
-  exit 2
+#
+# If something is already listening on port 8080, stop it:
+#
+# 1) Try to detect docker containers that publish 8080 and remove them.
+EXISTING_CONTAINERS=\$(docker ps --format '{{.ID}} {{.Ports}}' | awk '/[:|,]8080[,:>]/ {print \$1}' || true)
+if [ -n "\$EXISTING_CONTAINERS" ]; then
+  echo "Found Docker container(s) exposing port 8080: \$EXISTING_CONTAINERS"
+  for c in \$EXISTING_CONTAINERS; do
+    echo "Stopping and removing container \$c"
+    docker rm -f \$c || true
+  done
+else
+  echo "No Docker container publishing 8080 found."
 fi
 
-echo "Restarting compose..."
-if command -v docker-compose >/dev/null 2>&1; then
-  docker-compose down || true
-  docker-compose up -d
+# 2) If still port 8080 is in use by a non-docker process, try to find and kill it.
+if ss -ltn '( sport = :8080 )' 2>/dev/null | grep -q LISTEN 2>/dev/null; then
+  echo "A process appears to be listening on :8080. Attempting to identify and kill it."
+  PIDS=\$(ss -ltnp '( sport = :8080 )' 2>/dev/null | awk -F 'pid=' '{for(i=2;i<=NF;i++){sub(/,.*$/,"",\$i); print \$i}}' | tr '\\n' ' ' || true)
+  if [ -n "\$PIDS" ]; then
+    echo "Killing PIDs: \$PIDS"
+    for p in \$PIDS; do
+      kill -9 \$p || true
+    done
+  else
+    # fallback to lsof if ss didn't provide pids
+    if command -v lsof >/dev/null 2>&1; then
+      PIDS=\$(lsof -t -iTCP:8080 -sTCP:LISTEN || true)
+      if [ -n "\$PIDS" ]; then
+        echo "Killing PIDs from lsof: \$PIDS"
+        for p in \$PIDS; do
+          kill -9 \$p || true
+        done
+      fi
+    fi
+  fi
 else
-  docker compose down || true
-  docker compose up -d
+  echo "No non-docker process listening on 8080."
+fi
+
+# Now safe to restart compose
+echo "Restarting compose..."
+if [ -f docker-compose.yml ] || [ -f docker-compose.yaml ]; then
+  if command -v docker-compose >/dev/null 2>&1; then
+    docker-compose down || true
+    docker-compose up -d
+  else
+    docker compose down || true
+    docker compose up -d
+  fi
+  echo "Docker compose restarted."
+else
+  echo "ERROR: docker-compose.yml not found in \$APP_DIR"
+  exit 2
 fi
 
 echo "Deploy script finished."
@@ -139,13 +176,14 @@ echo "Deploy script finished."
             writeFile file: 'jenkins_deploy.sh', text: deployScript
             sh 'chmod +x jenkins_deploy.sh'
 
-            // copy the script to remote and execute it
+            // copy and run on remote EC2
+            // use scp/ssh with provided keyfile
             sh """
               scp -o StrictHostKeyChecking=no -i "$EC2_KEY_FILE" jenkins_deploy.sh ${EC2_USER_FROM_CRED}@${EC2_HOST}:/tmp/jenkins_deploy.sh
               ssh -o StrictHostKeyChecking=no -i "$EC2_KEY_FILE" ${EC2_USER_FROM_CRED}@${EC2_HOST} 'sudo chmod +x /tmp/jenkins_deploy.sh && sudo /bin/bash /tmp/jenkins_deploy.sh'
             """
 
-            // cleanup local script
+            // cleanup local
             sh 'rm -f jenkins_deploy.sh || true'
           }
         }
@@ -156,15 +194,11 @@ echo "Deploy script finished."
   post {
     success {
       echo '✅ Deployment finished (pipeline success).'
-      script {
-        sh 'docker logout || true'
-      }
+      script { sh 'docker logout || true' }
     }
     failure {
       echo '❌ Pipeline failed — inspect logs.'
-      script {
-        sh 'docker logout || true'
-      }
+      script { sh 'docker logout || true' }
     }
   }
 }
