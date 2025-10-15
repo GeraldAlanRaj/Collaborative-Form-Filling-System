@@ -2,10 +2,9 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
         DOCKERHUB_REPO = 'yourdockerhubusername/collaborative-form-system'
-        // EC2_USER and EC2_KEY removed from environment. Keep EC2_HOST here or set as a parameter.
         EC2_HOST = 'your-ec2-public-ip'
+        // Do NOT place ssh private key or docker credentials in environment
     }
 
     stages {
@@ -21,7 +20,8 @@ pipeline {
                 dir('backend') {
                     echo '📦 Installing backend dependencies...'
                     sh 'npm install'
-                    sh 'npm run build || echo "No build script found, skipping..."'
+                    echo '⚙️ Building backend (if build script exists)...'
+                    sh 'npm run build || echo "No build script found in backend/package.json; skipping build."'
                 }
             }
         }
@@ -31,6 +31,7 @@ pipeline {
                 dir('frontend') {
                     echo '📦 Installing frontend dependencies...'
                     sh 'npm install'
+                    echo '⚙️ Building frontend...'
                     sh 'npm run build'
                 }
             }
@@ -39,7 +40,17 @@ pipeline {
         stage('Docker Login') {
             steps {
                 echo '🔐 Logging into DockerHub...'
-                sh 'echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin'
+                script {
+                    // Ensure you have a Jenkins credential of kind "Username with password" and ID 'dockerhub-credentials'
+                    withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        def rc = sh(returnStatus: true, script: 'echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin')
+                        if (rc != 0) {
+                            error("Docker login failed (exit code ${rc}). Check dockerhub-credentials username/password (use a Docker Hub token).")
+                        } else {
+                            echo "Docker login succeeded as ${DOCKER_USER}"
+                        }
+                    }
+                }
             }
         }
 
@@ -47,8 +58,24 @@ pipeline {
             steps {
                 script {
                     echo '🐳 Building Docker images...'
-                    sh 'docker build -t $DOCKERHUB_REPO-backend ./backend'
-                    sh 'docker build -t $DOCKERHUB_REPO-frontend ./frontend'
+
+                    // Backend Dockerfile detection and build
+                    if (fileExists('backend/Dockerfile')) {
+                        sh 'docker build -t $DOCKERHUB_REPO-backend -f backend/Dockerfile backend'
+                    } else if (fileExists('backend/DockerFile')) {
+                        sh 'docker build -t $DOCKERHUB_REPO-backend -f backend/DockerFile backend'
+                    } else {
+                        error "Backend Dockerfile not found (backend/Dockerfile or backend/DockerFile). Please add it."
+                    }
+
+                    // Frontend Dockerfile detection and build
+                    if (fileExists('frontend/Dockerfile')) {
+                        sh 'docker build -t $DOCKERHUB_REPO-frontend -f frontend/Dockerfile frontend'
+                    } else if (fileExists('frontend/DockerFile')) {
+                        sh 'docker build -t $DOCKERHUB_REPO-frontend -f frontend/DockerFile frontend'
+                    } else {
+                        error "Frontend Dockerfile not found (frontend/Dockerfile or frontend/DockerFile). Please add it."
+                    }
 
                     echo '📤 Pushing images to DockerHub...'
                     sh 'docker push $DOCKERHUB_REPO-backend'
@@ -61,14 +88,18 @@ pipeline {
             steps {
                 echo '🚀 Deploying on EC2 via SSH...'
                 script {
+                    // Ensure you have a Jenkins credential of kind "SSH Username with private key" and ID 'ec2-ssh-key'
                     withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-key', keyFileVariable: 'EC2_KEY_FILE', usernameVariable: 'EC2_USER_FROM_CRED')]) {
                         sh """
                         chmod 600 "$EC2_KEY_FILE"
                         ssh -o StrictHostKeyChecking=no -i "$EC2_KEY_FILE" ${EC2_USER_FROM_CRED}@${EC2_HOST} '
-                            docker pull $DOCKERHUB_REPO-backend &&
-                            docker pull $DOCKERHUB_REPO-frontend &&
-                            cd /home/${EC2_USER_FROM_CRED}/app &&
-                            docker compose down &&
+                            set -e
+                            echo "Pulling images..."
+                            docker pull $DOCKERHUB_REPO-backend
+                            docker pull $DOCKERHUB_REPO-frontend
+                            echo "Changing to app dir and restarting compose..."
+                            cd /home/${EC2_USER_FROM_CRED}/app || { echo "app dir not found"; exit 1; }
+                            docker compose down || true
                             docker compose up -d
                         '
                         """
