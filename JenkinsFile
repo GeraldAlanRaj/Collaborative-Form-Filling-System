@@ -1,133 +1,91 @@
 pipeline {
-  agent any
+    agent any
 
-  environment {
-    DOCKERHUB_CREDENTIALS = 'dockerhub-credentials'   // your Jenkins DockerHub credential ID
-    BACKEND_IMAGE = "gerryaj2004/proactively-backend"
-    FRONTEND_IMAGE = "gerryaj2004/proactively-frontend"
-    TAG = "${env.BUILD_NUMBER ?: 'latest'}"
-  }
-
-  stages {
-
-    /* ----------------------------------- CHECKOUT ----------------------------------- */
-    stage('Checkout') {
-      steps {
-        checkout scm
-      }
+    environment {
+        DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')  // Set this in Jenkins credentials
+        DOCKERHUB_REPO = 'yourdockerhubusername/collaborative-form-system'
+        EC2_USER = 'ec2-user'
+        EC2_HOST = 'your-ec2-public-ip'
+        EC2_KEY = credentials('ec2-ssh-key')  // Private key credential ID in Jenkins
     }
 
-    /* ----------------------------------- BUILD BACKEND ----------------------------------- */
-    stage('Build Backend') {
-      steps {
-        dir('proactivle/backend') {
-          // Use npm install instead of npm ci (to avoid missing lockfile issue)
-          sh '''
-            echo "📦 Installing backend dependencies..."
-            npm install
-            echo "✅ Running backend build (if any)..."
-            npm run build || true
-            echo "🐳 Building backend Docker image..."
-            docker build -t ${BACKEND_IMAGE}:${TAG} .
-          '''
+    stages {
+        stage('Checkout') {
+            steps {
+                echo '📥 Checking out source code...'
+                checkout scm
+            }
         }
-      }
-    }
 
-    /* ----------------------------------- BUILD FRONTEND ----------------------------------- */
-    stage('Build Frontend') {
-      steps {
-        dir('proactivle/frontend') {
-          sh '''
-            echo "📦 Installing frontend dependencies..."
-            npm install
-            echo "🌐 Building frontend Docker image..."
-            docker build \
-              --build-arg VITE_API_BASE_URL=http://13.201.4.53:8080/api \
-              --build-arg VITE_API_SOCKET_URL=http://13.201.4.53:8080 \
-              -t ${FRONTEND_IMAGE}:${TAG} .
-          '''
+        stage('Build Backend') {
+            steps {
+                dir('backend') {
+                    echo '📦 Installing backend dependencies...'
+                    sh 'npm install'
+                    echo '⚙️ Building backend...'
+                    sh 'npm run build || echo "No build script found, skipping..."'
+                }
+            }
         }
-      }
-    }
 
-    /* ----------------------------------- DOCKER LOGIN ----------------------------------- */
-    stage('Docker Login') {
-      steps {
-        withCredentials([usernamePassword(credentialsId: DOCKERHUB_CREDENTIALS, usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-          sh '''
-            echo "🔐 Logging in to DockerHub..."
-            echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-          '''
+        stage('Build Frontend') {
+            steps {
+                dir('frontend') {
+                    echo '📦 Installing frontend dependencies...'
+                    sh 'npm install'
+                    echo '⚙️ Building frontend...'
+                    sh 'npm run build'
+                }
+            }
         }
-      }
-    }
 
-    /* ----------------------------------- PUSH IMAGES ----------------------------------- */
-    stage('Push Images') {
-      steps {
-        sh '''
-          echo "📤 Pushing Docker images to DockerHub..."
-          docker push ${BACKEND_IMAGE}:${TAG}
-          docker push ${FRONTEND_IMAGE}:${TAG}
-
-          echo "🪶 Tagging latest..."
-          docker tag ${BACKEND_IMAGE}:${TAG} ${BACKEND_IMAGE}:latest || true
-          docker tag ${FRONTEND_IMAGE}:${TAG} ${FRONTEND_IMAGE}:latest || true
-
-          echo "📤 Pushing latest tags..."
-          docker push ${BACKEND_IMAGE}:latest || true
-          docker push ${FRONTEND_IMAGE}:latest || true
-        '''
-      }
-    }
-
-    /* ----------------------------------- DEPLOY TO EC2 ----------------------------------- */
-    stage('Deploy to EC2 using Docker Compose') {
-      steps {
-        script {
-          // Pull secrets securely from Jenkins credentials
-          withCredentials([
-            string(credentialsId: 'MONGO_URI_CRED', variable: 'MONGO_URI'),
-            string(credentialsId: 'JWT_SECRET_CRED', variable: 'JWT_SECRET'),
-            string(credentialsId: 'CLIENT_URL_CRED', variable: 'CLIENT_URL')
-          ]) {
-            sh '''
-              echo "🛠️ Writing backend.env file..."
-              cat > ${WORKSPACE}/proactivle/backend.env <<EOF
-MONGODB_URI=${MONGO_URI}
-JWT_SECRET=${JWT_SECRET}
-CLIENT_URL=${CLIENT_URL}
-PORT=8080
-EOF
-              chmod 600 ${WORKSPACE}/proactivle/backend.env
-
-              echo "🚀 Deploying with Docker Compose..."
-              cd ${WORKSPACE}
-              docker compose -f docker-compose.yml pull || true
-              docker compose -f docker-compose.yml up -d --remove-orphans
-
-              echo "✅ Deployment complete!"
-            '''
-          }
+        stage('Docker Login') {
+            steps {
+                echo '🔐 Logging into DockerHub...'
+                sh 'echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin'
+            }
         }
-      }
-    }
-  }
 
-  /* ----------------------------------- POST ACTIONS ----------------------------------- */
-  post {
-    always {
-      sh '''
-        echo "🚪 Logging out from DockerHub..."
-        docker logout || true
-      '''
+        stage('Build & Push Images') {
+            steps {
+                script {
+                    echo '🐳 Building Docker images...'
+                    sh 'docker build -t $DOCKERHUB_REPO-backend ./backend'
+                    sh 'docker build -t $DOCKERHUB_REPO-frontend ./frontend'
+
+                    echo '📤 Pushing images to DockerHub...'
+                    sh 'docker push $DOCKERHUB_REPO-backend'
+                    sh 'docker push $DOCKERHUB_REPO-frontend'
+                }
+            }
+        }
+
+        stage('Deploy to EC2') {
+            steps {
+                echo '🚀 Deploying on EC2 via SSH...'
+                script {
+                    sh """
+                    ssh -o StrictHostKeyChecking=no -i $EC2_KEY $EC2_USER@$EC2_HOST '
+                        docker pull $DOCKERHUB_REPO-backend &&
+                        docker pull $DOCKERHUB_REPO-frontend &&
+                        cd /home/$EC2_USER/app &&
+                        docker compose down &&
+                        docker compose up -d
+                    '
+                    """
+                }
+            }
+        }
     }
-    success {
-      echo "🎉 Pipeline completed successfully!"
+
+    post {
+        success {
+            echo '✅ Deployment successful!'
+            sh 'docker logout'
+        }
+        failure {
+            echo '❌ Pipeline failed. Check logs for details.'
+            sh 'docker logout || true'
+        }
     }
-    failure {
-      echo "❌ Pipeline failed. Check Jenkins logs for details."
-    }
-  }
 }
