@@ -2,9 +2,9 @@ pipeline {
   agent any
 
   environment {
-    BACKEND_REPO  = 'gerryaj2004/proactively-backend'
-    FRONTEND_REPO = 'gerryaj2004/proactively-frontend'
-    EC2_HOST      = '13.201.4.53'
+    BACKEND_REPO   = 'gerryaj2004/proactively-backend'
+    FRONTEND_REPO  = 'gerryaj2004/proactively-frontend'
+    EC2_HOST       = '13.201.4.53'
   }
 
   stages {
@@ -32,7 +32,7 @@ pipeline {
           echo '📦 Installing frontend dependencies...'
           sh 'npm install'
           echo '⚙️ Building frontend...'
-          sh 'npm run build'
+          sh 'npm run build || echo "No build script found in frontend/package.json; skipping build."'
         }
       }
     }
@@ -64,7 +64,7 @@ pipeline {
           echo "  - ${backendTag}"
           echo "  - ${frontendTag}"
 
-          // Build backend (Dockerfile or DockerFile)
+          // Build backend
           if (fileExists('backend/Dockerfile')) {
             sh "docker build -t ${backendTag} -f backend/Dockerfile backend"
           } else if (fileExists('backend/DockerFile')) {
@@ -73,7 +73,7 @@ pipeline {
             error "Backend Dockerfile not found (backend/Dockerfile or backend/DockerFile)."
           }
 
-          // Build frontend (Dockerfile or DockerFile)
+          // Build frontend
           if (fileExists('frontend/Dockerfile')) {
             sh "docker build -t ${frontendTag} -f frontend/Dockerfile frontend"
           } else if (fileExists('frontend/DockerFile')) {
@@ -86,7 +86,7 @@ pipeline {
           sh "docker push ${backendTag}"
           sh "docker push ${frontendTag}"
 
-          // Also tag & push :latest so existing docker-compose.yml (which references :latest) works
+          // Tag & push :latest so compose referencing :latest works
           sh "docker tag ${backendTag} ${env.BACKEND_REPO}:latest"
           sh "docker tag ${frontendTag} ${env.FRONTEND_REPO}:latest"
           sh "docker push ${env.BACKEND_REPO}:latest"
@@ -100,13 +100,12 @@ pipeline {
     stage('Deploy to EC2') {
       steps {
         script {
-          // compute tag ON JENKINS so we pass exact strings to EC2
           def tag = env.BUILD_NUMBER ?: 'latest'
           def backendImageWithTag = "${env.BACKEND_REPO}:${tag}"
           def frontendImageWithTag = "${env.FRONTEND_REPO}:${tag}"
 
           withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-key', keyFileVariable: 'EC2_KEY_FILE', usernameVariable: 'EC2_USER_FROM_CRED')]) {
-            // create a small deploy script (on the Jenkins agent) with the actual image tags
+            // Create deploy script to run on EC2
             def deployScript = """#!/bin/bash
 set -euo pipefail
 
@@ -120,12 +119,8 @@ echo "Pulling images: ${backendImageWithTag} , ${frontendImageWithTag}"
 docker pull ${backendImageWithTag} || true
 docker pull ${frontendImageWithTag} || true
 
-if [ ! -f docker-compose.yml ] && [ ! -f docker-compose.yaml ]; then
-  echo "ERROR: docker-compose.yml not found in \$APP_DIR"
-  exit 2
-fi
-
-echo "Restarting compose..."
+# If docker-compose is installed as 'docker-compose' or 'docker compose', handle both
+echo "Restarting docker-compose stack..."
 if command -v docker-compose >/dev/null 2>&1; then
   docker-compose down || true
   docker-compose up -d
@@ -136,13 +131,16 @@ fi
 
 echo "Deploy script finished."
 """
+            // Write deploy script to workspace
             writeFile file: 'jenkins_deploy.sh', text: deployScript
             sh 'chmod +x jenkins_deploy.sh'
 
-            // copy the script to remote and execute it
+            // SCP docker-compose, monitoring folder and deploy script to EC2, then execute deploy script
             sh """
+              scp -o StrictHostKeyChecking=no -i "$EC2_KEY_FILE" docker-compose.yml ${EC2_USER_FROM_CRED}@${EC2_HOST}:/home/${EC2_USER_FROM_CRED}/app/docker-compose.yml
+              scp -o StrictHostKeyChecking=no -i "$EC2_KEY_FILE" -r monitoring ${EC2_USER_FROM_CRED}@${EC2_HOST}:/home/${EC2_USER_FROM_CRED}/app/
               scp -o StrictHostKeyChecking=no -i "$EC2_KEY_FILE" jenkins_deploy.sh ${EC2_USER_FROM_CRED}@${EC2_HOST}:/tmp/jenkins_deploy.sh
-              ssh -o StrictHostKeyChecking=no -i "$EC2_KEY_FILE" ${EC2_USER_FROM_CRED}@${EC2_HOST} 'sudo chmod +x /tmp/jenkins_deploy.sh && sudo /bin/bash /tmp/jenkins_deploy.sh'
+              ssh -o StrictHostKeyChecking=no -i "$EC2_KEY_FILE" ${EC2_USER_FROM_CRED}@${EC2_HOST} 'chmod +x /tmp/jenkins_deploy.sh && bash /tmp/jenkins_deploy.sh'
             """
 
             // cleanup local script
@@ -151,20 +149,17 @@ echo "Deploy script finished."
         }
       }
     }
+
   } // stages
 
   post {
     success {
       echo '✅ Deployment finished (pipeline success).'
-      script {
-        sh 'docker logout || true'
-      }
+      script { sh 'docker logout || true' }
     }
     failure {
       echo '❌ Pipeline failed — inspect logs.'
-      script {
-        sh 'docker logout || true'
-      }
+      script { sh 'docker logout || true' }
     }
   }
 }

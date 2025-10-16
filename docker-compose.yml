@@ -1,14 +1,74 @@
 version: "3.8"
+
 services:
   backend:
     image: gerryaj2004/proactively-backend:latest
     restart: always
     env_file: ./backend.env
     ports:
-      - "8081:8081"   # host:container -> host 8081 mapped to container 8081
+      - "8081:8081"
+    # optional: ensure restart on failure
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/metrics"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   frontend:
     image: gerryaj2004/proactively-frontend:latest
     restart: always
     ports:
-      - "80:8082"     # keep host port 80 but map it to container's 8082
+      - "80:8082"
+
+  # --- Monitoring services ---
+  prometheus:
+    image: prom/prometheus:latest
+    restart: always
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - backend
+      - node-exporter
+      - cadvisor
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    restart: always
+    pid: "host"
+    command:
+      - '--path.rootfs=/host'
+    volumes:
+      - /:/host:ro,rslave
+    ports:
+      - "9100:9100"
+
+  cadvisor:
+    image: gcr.io/google-containers/cadvisor:latest
+    restart: always
+    volumes:
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "8080:8080"
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: always
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123   # change this in production
+    volumes:
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  prometheus_data:
+  grafana_data:
