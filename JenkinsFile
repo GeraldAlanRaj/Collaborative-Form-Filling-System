@@ -4,7 +4,7 @@ pipeline {
   environment {
     BACKEND_REPO   = 'gerryaj2004/proactively-backend'
     FRONTEND_REPO  = 'gerryaj2004/proactively-frontend'
-    EC2_HOST       = '13.201.4.53'
+    EC2_HOST       = '35.154.50.110'
   }
 
   stages {
